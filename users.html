@@ -3,35 +3,64 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Utilisateurs & Rôles — Administration</title>
+  <title>Utilisateurs &amp; Rôles — Administration</title>
+
+  <!-- Bootstrap & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <!-- Styles -->
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
+
+<!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
-    index.html
-      assets/img/GLPI.png
+    <a class="navbar-brand d-flex align-items-center" href="index.html">
+      <img src="assets/img/GLPI.png" alt="Centre d’assistance" class="brand-logo">
       <span class="ms-2">Centre d’assistance</span>
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain">
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain"
+            aria-controls="navbarsMain" aria-expanded="false" aria-label="Basculer la navigation">
       <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
     </button>
+
     <div class="collapse navbar-collapse" id="navbarsMain">
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
-        <li class="nav-item">index.htmlDemander une assistance</a></li>
-        <li class="nav-item">tickets.htmlMes demandes</a></li>
-        <li class="nav-item d-none" id="nav-admin">admin.htmlAdministration</a></li>
-        <li class="nav-item d-none" id="nav-users">users.htmlUtilisateurs & Rôles</a></li>
-        <li class="nav-item d-none" id="nav-stats">stats.htmlStatistiques</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="index.html">Demander une assistance</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="tickets.html">Mes demandes</a>
+        </li>
+
+        <!-- Lien Admin (affiché par JS si rôle admin) -->
+        <li class="nav-item d-none" id="nav-admin">
+          <a class="nav-link" href="admin.html">Administration</a>
+        </li>
+
+        <!-- Lien Utilisateurs & Rôles (page courante) -->
+        <li class="nav-item d-none" id="nav-users">
+          <a class="nav-link active" aria-current="page" href="users.html">Utilisateurs &amp; Rôles</a>
+        </li>
+
+        <!-- Lien Statistiques (affiché par JS si rôle admin) -->
+        <li class="nav-item d-none" id="nav-stats">
+          <a class="nav-link" href="stats.html">Statistiques</a>
+        </li>
       </ul>
+
       <div class="d-flex align-items-center gap-2">
         <span class="navbar-text small d-none d-md-inline" id="user-display"></span>
+
+        <!-- Badge Admin -->
         <span id="badge-admin" class="badge rounded-pill bg-warning text-dark ms-1 d-none">
           <i class="bi bi-shield-lock-fill me-1"></i>Admin
         </span>
-        login.htmlSe connecter</a>
+
+        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
         <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
         <div id="avatar" class="avatar-circle ms-2 d-none">ED</div>
       </div>
@@ -39,9 +68,10 @@
   </div>
 </nav>
 
+<!-- MAIN -->
 <main class="container my-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Utilisateurs & Rôles</h4>
+    <h4 class="mb-0">Utilisateurs &amp; Rôles</h4>
     <input type="search" id="search" class="form-control form-control-sm" style="width:260px"
            placeholder="Rechercher (email, nom)…">
   </div>
@@ -72,16 +102,19 @@
   <small>© 2026 • Centre d’assistance — Méthodes Logistiques</small>
 </footer>
 
+<!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
-  <div id="toast" class="toast">
-    <div class="toast-header"><strong class="me-auto">Utilisateurs</strong>
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
+    <div class="toast-header">
+      <strong class="me-auto">Utilisateurs</strong>
       <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Fermer"></button>
     </div>
     <div id="toast-body" class="toast-body">Message…</div>
   </div>
 </div>
 
-https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js</script>
-assets/js/users.js</script>
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module" src="assets/js/users.js"></script>
 </body>
 </html>

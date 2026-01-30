@@ -3,7 +3,7 @@ import { db } from './firebase-init.js';
 import { requireAuth, toast } from './app.js';
 import {
   collection, query, orderBy, limit, limitToLast, startAfter, endBefore,
-  getDocs, setDoc, deleteDoc, doc
+  getDocs, getDoc, setDoc, deleteDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const elBody   = document.getElementById('users-tbody');
@@ -18,7 +18,7 @@ let firstDoc = null;    // premier doc de la page courante (pour "prev")
 let history = [];       // pile des firstDoc des pages visitées
 let adminsSet = new Set();
 
-/* --- Helper sécurité rendu HTML --- */
+/* --- Helper sécurité rendu HTML (affichage uniquement) --- */
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c =>
     ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
@@ -29,12 +29,13 @@ function row(user, isAdmin){
   const name  = esc(user.displayName) || '—';
   const email = esc(user.email) || '—';
   const canCreate = user.canCreateTickets !== false;
-  const uid = esc(user.uid || '');
+  const uidText = esc(user.uid || '');
+  // data-uid met l'UID brut (sécurisé car Firestore IDs = [A-Za-z0-9_-])
   return `
     <tr>
       <td>
         <div class="fw-semibold">${name}</div>
-        <div class="small text-muted">${uid}</div>
+        <div class="small text-muted">${uidText}</div>
       </td>
       <td>${email}</td>
       <td class="text-center">
@@ -49,7 +50,7 @@ function row(user, isAdmin){
       </td>
       <td class="text-end">
         <button class="btn btn-sm ${isAdmin?'btn-outline-danger':'btn-outline-primary'}"
-                data-action="toggle-admin" data-uid="${uid}">
+                data-action="toggle-admin" data-uid="${user.uid}">
           ${isAdmin?'Retirer admin':'Promouvoir admin'}
         </button>
       </td>
@@ -159,23 +160,18 @@ elSearch?.addEventListener('input', async () => {
   const user = await requireAuth(true);
   if (!user) return;
 
-  // Petite attente pour que app.js fixe window.__isAdmin via onAuthStateChanged
-  await new Promise((resolve) => {
-    let waited = 0;
-    const step = 20;
-    const max  = 2000;
-    const t = setInterval(() => {
-      if (typeof window.__isAdmin === 'boolean' || waited >= max) {
-        clearInterval(t);
-        resolve();
-      }
-      waited += step;
-    }, step);
-  });
-
-  if (window.__isAdmin !== true) {
-    toast('Accès admin requis');
-    setTimeout(() => window.location.href = 'tickets.html', 800);
+  // ✅ Vérifie l'accès admin DIRECTEMENT sur Firestore pour éviter toute course avec app.js
+  try {
+    const adminSnap = await getDoc(doc(db, 'admins', user.uid));
+    if (!adminSnap.exists()) {
+      toast('Accès admin requis');
+      setTimeout(() => window.location.href = 'tickets.html', 800);
+      return;
+    }
+  } catch (e) {
+    console.error('[users] admin check error:', e);
+    toast('Impossible de vérifier les droits (règles Firestore ?)');
+    setTimeout(() => window.location.href = 'tickets.html', 1200);
     return;
   }
 

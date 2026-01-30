@@ -1,11 +1,10 @@
-// assets/js/app.js
 // ------------------------------------------------------------
 // Fichier commun UI + helpers. NE PAS ré-initialiser Firebase ici.
 // ------------------------------------------------------------
 
 import { auth, db } from './firebase-init.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 /* ============= Utilitaires DOM ============= */
 function $(id){ return document.getElementById(id); }
@@ -18,7 +17,7 @@ const btnLogin  = $('btn-login');
 const btnLogout = $('btn-logout');
 const navAdmin  = $('nav-admin');   // <li id="nav-admin" class="d-none">...</li>
 const navStats  = $('nav-stats');   // <li id="nav-stats" class="d-none">...</li> (optionnel)
-const navUsers = document.getElementById('nav-users');
+const navUsers  = document.getElementById('nav-users');
 
 const avatar    = $('avatar');      // <div id="avatar" class="avatar-circle d-none"></div>
 const badge     = $('badge-admin'); // <span id="badge-admin" class="badge ... d-none">Admin</span>
@@ -81,6 +80,21 @@ function setAdminUI(isAdmin) {
   window.__isAdmin = !!isAdmin;
 }
 
+/* ============= AJOUT : MàJ auto du profil utilisateur (users/{uid}) ============= */
+async function upsertUserProfile(user) {
+  try {
+    await setDoc(doc(db, 'users', user.uid), {
+      email:       user.email || null,
+      displayName: user.displayName || null,
+      photoURL:    user.photoURL || null,
+      canCreateTickets: true,            // drapeau métier optionnel
+      lastLoginAt: serverTimestamp()
+    }, { merge: true });
+  } catch (e) {
+    console.warn('[app] profil users non mis à jour :', e?.code || e?.message || e);
+  }
+}
+
 /* ============= Wiring Navbar / Badge ============= */
 onAuthStateChanged(auth, async (user) => {
   // État par défaut (déconnecté)
@@ -107,6 +121,9 @@ onAuthStateChanged(auth, async (user) => {
     avatar.textContent = initial;
     show(avatar, true);
   }
+
+  // AJOUT : Crée/Met à jour le profil users/{uid} (pour la page Users & Rôles)
+  await upsertUserProfile(user);
 
   // Rôle admin (avec cache sessionStorage)
   let isAdmin = false;

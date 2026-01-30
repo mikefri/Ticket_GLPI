@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Service ED Reflex</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg sncftop">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center" href="index.html">
+      <img src="assets/img/logo-technicentre.svg" alt="Technicentre de Nevers" class="brand-logo"/>
+      <span>Service ED Reflex</span>
+    </a>
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain" aria-controls="navbarsMain" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarsMain">
+      <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
+        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d’assistance</a></li>
+        <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-2">
+        <span class="navbar-text small d-none d-md-inline" id="user-display"></span>
+        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
+        <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
+        <div id="avatar" class="avatar-circle ms-2 d-none">ED</div>
+      </div>
+    </div>
+  </div>
+</nav>
+<main class="container my-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="index.html">Accueil</a></li>
+      <li class="breadcrumb-item active" aria-current="page">Administration</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Console d’administration</h4>
+    <div class="d-flex gap-2">
+      <input type="search" class="form-control form-control-sm" id="search" placeholder="Recherche (titre, email, catégorie)…" style="width: 280px;">
+      <select class="form-select form-select-sm" id="filter-status" style="width: 160px;">
+        <option value="">Tous les statuts</option>
+        <option>Ouvert</option>
+        <option>En cours</option>
+        <option>En attente</option>
+        <option>Résolu</option>
+        <option>Fermé</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="admin-list" class="vstack gap-3"></div>
+  <p id="admin-empty" class="text-muted">Aucun ticket à afficher.</p>
+</main>
+<footer class="text-center py-4">
+  <small>© 2026 • Service ED Reflex • Technicentre de Nevers • Firebase & GitHub Pages</small>
+</footer>
+
+<script type="module" src="assets/js/admin.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module" src="assets/js/app.js"></script>
+</body>
+</html>

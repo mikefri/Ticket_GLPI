@@ -227,11 +227,11 @@ function initCreateModal() {
   if (!modalCreate) {
     modalCreate = new bootstrap.Modal(document.getElementById('modal-create-user'));
   }
-  if (!functions) {
-    functions = FUNCTIONS_REGION
-      ? getFunctions(undefined, FUNCTIONS_REGION)
-      : getFunctions();
-  }
+
+if (!functions) {
+  functions = getFunctions(undefined, 'europe-west1');
+}
+
   return true;
 }
 

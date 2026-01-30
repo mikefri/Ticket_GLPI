@@ -1,4 +1,3 @@
-// assets/js/app.js
 // ------------------------------------------------------------
 // Fichier commun UI + helpers. NE PAS ré-initialiser Firebase ici.
 // ------------------------------------------------------------
@@ -145,6 +144,7 @@ onAuthStateChanged(auth, async (user) => {
     isAdmin = await isUserAdmin(user.uid);
   }
 
+  console.log('[admin][onAuthStateChanged] user=', user.uid, 'isAdmin=', isAdmin);
   setAdminUI(isAdmin);
 });
 
@@ -160,4 +160,38 @@ if (btnLogout) {
       window.location.href = 'login.html';
     }
   });
+}
+
+/* ============= Helper additionnel : requireAdmin() ============= */
+/** 
+ * Vérifie l'authentification + le rôle admin (avec cache).
+ * Évite toute course asynchrone avec window.__isAdmin.
+ */
+export async function requireAdmin(redirect = true) {
+  const user = await requireAuth(redirect);
+  if (!user) return null;
+
+  let isAdmin = false;
+  try {
+    const key = `isAdmin:${user.uid}`;
+    const cached = sessionStorage.getItem(key);
+    if (cached === '1') isAdmin = true;
+    else if (cached === '0') isAdmin = false;
+    else {
+      isAdmin = await isUserAdmin(user.uid);
+      sessionStorage.setItem(key, isAdmin ? '1' : '0');
+    }
+  } catch {
+    isAdmin = await isUserAdmin(user.uid);
+  }
+
+  console.log('[admin][requireAdmin] user=', user.uid, 'isAdmin=', isAdmin);
+  setAdminUI(isAdmin);
+
+  if (!isAdmin && redirect) {
+    toast('Accès admin requis');
+    setTimeout(() => window.location.href = 'tickets.html', 800);
+    return null;
+  }
+  return user;
 }

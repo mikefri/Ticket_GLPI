@@ -74,3 +74,55 @@ export function requireAuth(redirect = true) {
     });
   });
 }
+
+
+// assets/js/app.js (ajoute ce bloc)
+import { db } from './firebase-init.js';
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// Vérifie si l'utilisateur est admin via /admins/{uid}
+async function isUserAdmin(uid) {
+  try {
+    const snap = await getDoc(doc(db, 'admins', uid));
+    return snap.exists();
+  } catch (e) {
+    console.error('[badge-admin] erreur vérif admin:', e);
+    return false;
+  }
+}
+
+// Monte le badge (et le lien nav) selon le rôle
+function wireAdminBadge() {
+  const badge = document.getElementById('badge-admin');
+  const navAdmin = document.getElementById('nav-admin'); // ton <li> masqué par défaut
+
+  const auth = getAuth();
+  onAuthStateChanged(auth, async (user) => {
+    if (!badge && !navAdmin) return; // rien à faire si pas présents dans le DOM
+
+    if (!user) {
+      badge?.classList.add('d-none');
+      navAdmin?.classList.add('d-none');
+      return;
+    }
+
+    // (option: petit cache session pour éviter un appel à chaque navigation)
+    const cacheKey = `isAdmin:${user.uid}`;
+    let show = sessionStorage.getItem(cacheKey);
+    if (show === null) {
+      show = (await isUserAdmin(user.uid)) ? '1' : '0';
+      sessionStorage.setItem(cacheKey, show);
+    }
+
+    const isAdmin = show === '1';
+    badge?.classList.toggle('d-none', !isAdmin);
+    navAdmin?.classList.toggle('d-none', !isAdmin);
+  });
+}
+
+// Appelle la fonction d’amorçage
+wireAdminBadge();
+
+// (le reste de ton app.js inchangé…)
+

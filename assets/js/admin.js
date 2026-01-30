@@ -1,30 +1,77 @@
+// assets/js/admin.js
+// ------------------------------------------------------------
+// Page Administration : liste les tickets, mise à jour de statut,
+// suppression avec confirmation. Accès réservé aux admins.
+// ------------------------------------------------------------
+
+import './app.js'; // monte navbar + badge + helpers
 import { db } from './firebase-init.js';
 import { requireAuth, badgeForStatus, badgeForPriority, formatDate, toast } from './app.js';
-import { collection, query, orderBy, onSnapshot, updateDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-const elList = document.getElementById('admin-list');
-const elEmpty = document.getElementById('admin-empty');
+import {
+  collection, query, orderBy, onSnapshot,
+  updateDoc, deleteDoc, doc, getDoc
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// ---------- Eléments ----------
+const elList       = document.getElementById('admin-list');
+const elEmpty      = document.getElementById('admin-empty');
 const filterStatus = document.getElementById('filter-status');
-const inputSearch = document.getElementById('search');
+const inputSearch  = document.getElementById('search');
 
-let data = [];
+// ---------- Etat ----------
+let data = [];           // snapshot docs (Firestore)
+let pendingDeleteId = null;
+let modalDelete = null;
 
+// ---------- Utils ----------
+function show(el, yes = true){ if (el) el.classList.toggle('d-none', !yes); }
+
+// Vérifie le rôle admin via /admins/{uid}
+async function isUserAdmin(uid) {
+  try {
+    const snap = await getDoc(doc(db, 'admins', uid));
+    return snap.exists();
+  } catch (e) {
+    console.error('[admin] isUserAdmin failed:', e);
+    return false;
+  }
+}
+
+// Rendu d'une carte ticket
 function renderItem(d) {
   const t = d.data();
   const id = d.id;
+  const details =
+    `${badgeForStatus(t.status)} ${badgeForPriority(t.priority)} ` +
+    `<span class="ms-2 text-muted small">${t.category}${t.type ? ' • ' + t.type : ''}</span>`;
+  const meta =
+    `Par ${t.email || t.createdBy} • ${formatDate(t.createdAt)} • #${id}`;
+
+  // Bouton suppression seulement si admin (flag posé par app.js)
+  const deleteBtn = (window.__isAdmin)
+    ? `<button type="button" class="btn btn-outline-danger btn-sm"
+               title="Supprimer ce ticket" aria-label="Supprimer ce ticket"
+               data-delete="${id}">
+         <i class="bi bi-trash"></i>
+       </button>`
+    : '';
+
   return `
   <div class="card soft">
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div>
           <h5 class="card-title mb-1">${t.title}</h5>
-          <div class="mb-2">${badgeForStatus(t.status)} ${badgeForPriority(t.priority)} <span class="ms-2 text-muted small">${t.category}${t.type ? ' • ' + t.type : ''}</span></div>
-          <div class="text-muted small">Par ${t.email||t.createdBy} • ${formatDate(t.createdAt)} • #${id}</div>
+          <div class="mb-2">${details}</div>
+          <div class="text-muted small">${meta}</div>
         </div>
         <div class="d-flex align-items-center gap-2">
           <select class="form-select form-select-sm" data-id="${id}" data-current="${t.status}">
-            ${['Ouvert','En cours','En attente','Résolu','Fermé'].map(s=>`<option ${s===t.status?'selected':''}>${s}</option>`).join('')}
+            ${['Ouvert','En cours','En attente','Résolu','Fermé']
+              .map(s => `<option ${s===t.status?'selected':''}>${s}</option>`).join('')}
           </select>
+          ${deleteBtn}
         </div>
       </div>
       <p class="card-text mt-2">${(t.description||'').replace(/</g,'&lt;')}</p>
@@ -32,8 +79,9 @@ function renderItem(d) {
   </div>`;
 }
 
+// Filtrer + dessiner
 function refreshList() {
-  const q = (inputSearch.value||'').toLowerCase();
+  const q = (inputSearch.value || '').toLowerCase();
   const fs = filterStatus.value;
   const filtered = data.filter(d => {
     const t = d.data();
@@ -44,39 +92,81 @@ function refreshList() {
   });
 
   elList.innerHTML = '';
-  if (filtered.length === 0) { elEmpty.classList.remove('d-none'); } else { elEmpty.classList.add('d-none'); }
+  show(elEmpty, filtered.length === 0);
   filtered.forEach(d => elList.insertAdjacentHTML('beforeend', renderItem(d)));
-
-  // change handlers for status selects
-  elList.querySelectorAll('select[data-id]').forEach(sel => {
-    sel.addEventListener('change', async (e) => {
-      const id = e.target.getAttribute('data-id');
-      const newStatus = e.target.value;
-      try {
-        await updateDoc(doc(db, 'tickets', id), { status: newStatus });
-        toast('Statut mis à jour');
-      } catch (err) {
-        toast('Maj refusée: ' + (err?.message||err));
-        e.target.value = e.target.getAttribute('data-current');
-      }
-    });
-  });
 }
 
+// ---------- Listeners (délégation) ----------
+filterStatus?.addEventListener('change', refreshList);
+inputSearch?.addEventListener('input', refreshList);
+
+// Délégation : changement de statut & clic suppression
+elList.addEventListener('change', async (e) => {
+  const sel = e.target.closest('select[data-id]');
+  if (!sel) return;
+  const id = sel.getAttribute('data-id');
+  const newStatus = sel.value;
+  try {
+    await updateDoc(doc(db, 'tickets', id), { status: newStatus });
+    toast('Statut mis à jour');
+    sel.setAttribute('data-current', newStatus);
+  } catch (err) {
+    console.error('[admin] update status', err);
+    toast('MàJ refusée : ' + (err?.code || err?.message || err));
+    sel.value = sel.getAttribute('data-current');
+  }
+});
+
+elList.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-delete]');
+  if (!btn) return;
+  pendingDeleteId = btn.getAttribute('data-delete');
+  if (!modalDelete) modalDelete = new bootstrap.Modal(document.getElementById('confirmDelete'));
+  modalDelete.show();
+});
+
+document.getElementById('btn-confirm-delete')?.addEventListener('click', async () => {
+  if (!pendingDeleteId) return;
+  try {
+    await deleteDoc(doc(db, 'tickets', pendingDeleteId));
+    toast('Ticket supprimé');
+  } catch (e) {
+    console.error('[admin] delete', e);
+    toast('Suppression refusée : ' + (e?.code || e?.message || e));
+  } finally {
+    pendingDeleteId = null;
+    modalDelete?.hide();
+  }
+});
+
+// ---------- Bootstrap de la page ----------
 (async () => {
   const user = await requireAuth(true);
   if (!user) return;
 
-  const q = query(collection(db, 'tickets'), orderBy('createdAt','desc'));
-  onSnapshot(q, (snap) => {
+  const admin = await isUserAdmin(user.uid);
+  if (!admin) {
+    toast('Accès admin requis');
+    // Option : rediriger vers la page "Mes tickets"
+    setTimeout(() => window.location.href = 'tickets.html', 800);
+    return;
+  }
+
+  // Requête temps réel (liste complète, admin uniquement)
+  const qAll = query(collection(db, 'tickets'), orderBy('createdAt', 'desc'));
+  onSnapshot(qAll, (snap) => {
     data = snap.docs;
     refreshList();
   }, (err) => {
-    toast('Accès refusé: compte non admin');
+    console.error('[admin] onSnapshot error:', err);
+    if (err.code === 'permission-denied') {
+      toast('Permission refusée (règles Firestore)');
+    } else if (err.code === 'failed-precondition') {
+      toast('Index manquant pour cette requête (voir console Firebase)');
+    } else {
+      toast('Erreur : ' + (err.message || err));
+    }
     elList.innerHTML = '';
-    elEmpty.classList.remove('d-none');
+    show(elEmpty, true);
   });
-
-  filterStatus.addEventListener('change', refreshList);
-  inputSearch.addEventListener('input', refreshList);
 })();

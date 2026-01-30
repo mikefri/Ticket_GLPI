@@ -1,6 +1,10 @@
 import { auth, db } from './firebase-init.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+// assets/js/app.js (ajoute ce bloc)
+import { db } from './firebase-init.js';
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 function setText(el, text) { if (el) el.textContent = text; }
 function show(el, yes=true) { if (!el) return; el.classList.toggle('d-none', !yes); }
@@ -76,10 +80,7 @@ export function requireAuth(redirect = true) {
 }
 
 
-// assets/js/app.js (ajoute ce bloc)
-import { db } from './firebase-init.js';
-import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getDoc, doc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
 
 // Vérifie si l'utilisateur est admin via /admins/{uid}
 async function isUserAdmin(uid) {

@@ -5,7 +5,9 @@
 
 import { auth, db } from './firebase-init.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import {
+  doc, getDoc, setDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 /* ============= Utilitaires DOM ============= */
 function $(id){ return document.getElementById(id); }
@@ -17,9 +19,8 @@ const elUser    = $('user-display');
 const btnLogin  = $('btn-login');
 const btnLogout = $('btn-logout');
 const navAdmin  = $('nav-admin');   // <li id="nav-admin" class="d-none">...</li>
-const navStats  = $('nav-stats');   // <li id="nav-stats" class="d-none">...</li> (optionnel)
-const navUsers = document.getElementById('nav-users');
-
+const navStats  = $('nav-stats');   // <li id="nav-stats" class="d-none">...</li>
+const navUsers  = $('nav-users');   // <li id="nav-users" class="d-none">...</li>
 const avatar    = $('avatar');      // <div id="avatar" class="avatar-circle d-none"></div>
 const badge     = $('badge-admin'); // <span id="badge-admin" class="badge ... d-none">Admin</span>
 
@@ -45,7 +46,6 @@ export function toast(message) {
   if (el && window.bootstrap?.Toast) {
     new bootstrap.Toast(el).show();
   } else {
-    // Fallback console si pas de toast dans la page
     console.log('[toast]', message);
   }
 }
@@ -71,14 +71,29 @@ async function isUserAdmin(uid) {
 }
 
 function setAdminUI(isAdmin) {
-  // Affiche/masque : lien "Administration", lien "Statistiques" et badge
+  // Affiche/masque : liens Admin/Stats/Users et badge
   show(navAdmin, !!isAdmin);
   if (navStats) show(navStats, !!isAdmin);
-  if (navUsers) navUsers.classList.toggle('d-none', !isAdmin);
+  if (navUsers) show(navUsers, !!isAdmin);
   if (badge)    badge.classList.toggle('d-none', !isAdmin);
 
-  // Expose un flag global si certaines pages veulent conditionner l’UI côté client
+  // Flag global (utile pour conditionner l’UI dans d’autres pages)
   window.__isAdmin = !!isAdmin;
+}
+
+/* ============= MàJ auto du profil utilisateur (users/{uid}) ============= */
+async function upsertUserProfile(user) {
+  try {
+    await setDoc(doc(db, 'users', user.uid), {
+      email:       user.email || null,
+      displayName: user.displayName || null,
+      photoURL:    user.photoURL || null,
+      canCreateTickets: true,            // drapeau métier optionnel
+      lastLoginAt: serverTimestamp()
+    }, { merge: true });
+  } catch (e) {
+    console.warn('[app] profil users non mis à jour :', e?.code || e?.message || e);
+  }
 }
 
 /* ============= Wiring Navbar / Badge ============= */
@@ -89,6 +104,7 @@ onAuthStateChanged(auth, async (user) => {
   show(btnLogout, false);
   show(navAdmin, false);
   if (navStats) show(navStats, false);
+  if (navUsers) show(navUsers, false);
   show(avatar, false);
   if (badge) badge.classList.add('d-none');
   window.__isAdmin = false;
@@ -107,6 +123,9 @@ onAuthStateChanged(auth, async (user) => {
     avatar.textContent = initial;
     show(avatar, true);
   }
+
+  // Crée/Met à jour le profil users/{uid} (pour la page Users & Rôles)
+  await upsertUserProfile(user);
 
   // Rôle admin (avec cache sessionStorage)
   let isAdmin = false;

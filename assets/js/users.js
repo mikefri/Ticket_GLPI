@@ -1,8 +1,8 @@
 import './app.js';
 import { db } from './firebase-init.js';
-import { requireAuth, toast } from './app.js';
+import { requireAdmin, toast } from './app.js';
 import {
-  collection, query, orderBy, limit, startAfter, endBefore,
+  collection, query, orderBy, limit, limitToLast, startAfter, endBefore,
   getDocs, setDoc, deleteDoc, doc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
@@ -13,20 +13,28 @@ const btnNext  = document.getElementById('btn-next');
 const pageInfo = document.getElementById('page-info');
 
 const PAGE_SIZE = 20;
-let lastDoc = null;
-let firstDoc = null;
-let stack = []; // pile de pagination
+let lastDoc = null;     // dernier doc de la page courante (pour "next")
+let firstDoc = null;    // premier doc de la page courante (pour "prev")
+let stack = [];         // pile des "firstDoc" des pages déjà visitées (prev fiable)
 let adminsSet = new Set();
 
+/* --- Helper sécurité rendu HTML --- */
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
+  );
+}
+
 function row(user, isAdmin){
-  const name  = user.displayName || '—';
-  const email = user.email || '—';
+  const name  = esc(user.displayName) || '—';
+  const email = esc(user.email) || '—';
   const canCreate = user.canCreateTickets !== false;
+  const uid = esc(user.uid || '');
   return `
     <tr>
       <td>
         <div class="fw-semibold">${name}</div>
-        <div class="small text-muted">${user.uid || ''}</div>
+        <div class="small text-muted">${uid}</div>
       </td>
       <td>${email}</td>
       <td class="text-center">
@@ -41,7 +49,7 @@ function row(user, isAdmin){
       </td>
       <td class="text-end">
         <button class="btn btn-sm ${isAdmin?'btn-outline-danger':'btn-outline-primary'}"
-                data-action="toggle-admin" data-uid="${user.uid}">
+                data-action="toggle-admin" data-uid="${uid}">
           ${isAdmin?'Retirer admin':'Promouvoir admin'}
         </button>
       </td>
@@ -54,43 +62,74 @@ async function loadAdmins() {
   snap.forEach(d => adminsSet.add(d.id));
 }
 
+/**
+ * Pagination fiable :
+ *  - first : limit(PAGE_SIZE)
+ *  - next  : startAfter(lastDoc) + limit(PAGE_SIZE)
+ *  - prev  : endBefore(firstDoc) + limitToLast(PAGE_SIZE)
+ */
 async function loadPage(direction = 'first'){
-  await loadAdmins();
+  try {
+    await loadAdmins();
+    console.log('[users] loadPage direction=', direction);
 
-  let q = query(collection(db, 'users'), orderBy('email'), limit(PAGE_SIZE));
-  if (direction === 'next' && lastDoc)  q = query(collection(db,'users'), orderBy('email'), startAfter(lastDoc), limit(PAGE_SIZE));
-  if (direction === 'prev' && stack.length > 1) {
-    // recalcule : on repart depuis le début et on avance
-    const marker = stack[stack.length - 2];
-    q = query(collection(db,'users'), orderBy('email'), startAfter(marker), limit(PAGE_SIZE));
-    stack.splice(stack.length - 1, 1);
-  }
-  const snap = await getDocs(q);
+    const base = query(collection(db, 'users'), orderBy('email'));
+    let q;
 
-  elBody.innerHTML = '';
-  if (snap.empty) {
-    pageInfo.textContent = 'Aucun utilisateur';
-    btnNext.disabled = true;
+    if (direction === 'first') {
+      q = query(base, limit(PAGE_SIZE));
+    } else if (direction === 'next' && lastDoc) {
+      q = query(base, startAfter(lastDoc), limit(PAGE_SIZE));
+    } else if (direction === 'prev' && stack.length > 1 && firstDoc) {
+      q = query(base, endBefore(firstDoc), limitToLast(PAGE_SIZE));
+    } else {
+      // rien à faire (pas d’historique pour prev, ou pas de lastDoc pour next)
+      return;
+    }
+
+    const snap = await getDocs(q);
+    console.log('[users] snap.size =', snap.size);
+
+    elBody.innerHTML = '';
+    if (snap.empty) {
+      pageInfo.textContent = 'Aucun utilisateur';
+      btnNext.disabled = true;
+      btnPrev.disabled = stack.length <= 1;
+      return;
+    }
+
+    const rows = [];
+    snap.forEach(d => {
+      const u = d.data();
+      u.uid = d.id;
+      rows.push(row(u, adminsSet.has(d.id)));
+    });
+
+    elBody.innerHTML = rows.join('');
+
+    // Marqueurs de pagination
+    firstDoc = snap.docs[0];
+    lastDoc  = snap.docs[snap.docs.length - 1];
+
+    if (direction === 'first') {
+      stack = [firstDoc];
+    } else if (direction === 'next') {
+      stack.push(firstDoc);
+    } else if (direction === 'prev') {
+      // on remonte d'une page : dépile l’ancienne "firstDoc"
+      stack.pop();
+      // par robustesse : met en cohérence l’entrée courante
+      stack[stack.length - 1] = firstDoc;
+    }
+
+    pageInfo.textContent = `Affichés: ${snap.size}`;
     btnPrev.disabled = stack.length <= 1;
-    return;
+    btnNext.disabled = snap.size < PAGE_SIZE;
+  } catch (err) {
+    console.error('[users] loadPage error:', err);
+    toast('Lecture des utilisateurs refusée ou erreur (voir console)');
+    pageInfo.textContent = 'Erreur de lecture';
   }
-
-  const rows = [];
-  snap.forEach(d => {
-    const u = d.data();
-    u.uid = d.id;
-    rows.push(row(u, adminsSet.has(d.id)));
-  });
-
-  elBody.innerHTML = rows.join('');
-
-  firstDoc = snap.docs[0];
-  lastDoc  = snap.docs[snap.docs.length - 1];
-  if (direction === 'first' || direction === 'next') stack.push(lastDoc);
-
-  pageInfo.textContent = `Affichés: ${snap.size}`;
-  btnPrev.disabled = stack.length <= 1;
-  btnNext.disabled = snap.size < PAGE_SIZE;
 }
 
 document.addEventListener('click', async (e) => {
@@ -109,6 +148,7 @@ document.addEventListener('click', async (e) => {
       await setDoc(doc(db, 'admins', uid), {});
       toast('Utilisateur promu administrateur');
     }
+    // recharge depuis la première page (simple et sûr)
     await loadPage('first');
   } catch (err) {
     console.error('[users] toggle admin', err);
@@ -131,13 +171,14 @@ elSearch?.addEventListener('input', async () => {
 });
 
 (async () => {
-  const user = await requireAuth(true);
+  // Contrôle propre : auth + rôle admin (avec cache) + UI
+  const user = await requireAdmin(true);
   if (!user) return;
 
-  if (window.__isAdmin !== true) {
-    toast('Accès admin requis');
-    setTimeout(() => window.location.href = 'tickets.html', 800);
-    return;
+  try {
+    await loadPage('first');
+  } catch (e) {
+    console.error('[users] loadPage init error:', e);
+    toast('Erreur de chargement de la liste (voir console)');
   }
-  await loadPage('first');
 })();

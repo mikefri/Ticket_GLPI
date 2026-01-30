@@ -1,5 +1,6 @@
+// assets/js/tickets.js
 import { db } from './firebase-init.js';
-import { requireAuth, badgeForStatus, badgeForPriority, formatDate } from './app.js';
+import { requireAuth, badgeForStatus, badgeForPriority, formatDate, toast } from './app.js';
 import { collection, query, where, orderBy, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const elList = document.getElementById('list');
@@ -28,20 +29,49 @@ function render(docSnap) {
   </div>`;
 }
 
+function buildQuery(user) {
+  const clauses = [ where('createdBy', '==', user.uid) ];
+  if (filterStatus.value)   clauses.push(where('status',   '==', filterStatus.value));
+  if (filterCategory.value) clauses.push(where('category', '==', filterCategory.value));
+  // IMPORTANT : on finit par un tri sur createdAt
+  return query(collection(db, 'tickets'), ...clauses, orderBy('createdAt', 'desc'));
+}
+
 async function attach(user) {
   if (unsub) unsub();
   elList.innerHTML = '';
+  elEmpty.classList.add('d-none');
 
-  const clauses = [ where('createdBy', '==', user.uid) ];
-  if (filterStatus.value) clauses.push(where('status', '==', filterStatus.value));
-  if (filterCategory.value) clauses.push(where('category', '==', filterCategory.value));
+  const q = buildQuery(user);
 
-  const q = query(collection(db, 'tickets'), ...clauses, orderBy('createdAt','desc'));
-  unsub = onSnapshot(q, (snap) => {
-    elList.innerHTML = '';
-    if (snap.empty) { elEmpty.classList.remove('d-none'); } else { elEmpty.classList.add('d-none'); }
-    snap.forEach((d) => { elList.insertAdjacentHTML('beforeend', render(d)); });
-  });
+  unsub = onSnapshot(q,
+    (snap) => {
+      elList.innerHTML = '';
+      if (snap.empty) {
+        elEmpty.classList.remove('d-none');
+        return;
+      }
+      elEmpty.classList.add('d-none');
+      snap.forEach((d) => elList.insertAdjacentHTML('beforeend', render(d)));
+    },
+    (err) => {
+      console.error('[tickets] onSnapshot error:', err);
+
+      // Messages utiles selon la cause
+      const msg = String(err?.message || '');
+      if (err?.code === 'failed-precondition' || msg.includes('index')) {
+        toast('Cette recherche nécessite un index Firestore. Ouvre la console pour suivre le lien proposé.');
+      } else if (err?.code === 'permission-denied') {
+        toast('Permissions insuffisantes pour lire les tickets (vérifiez les règles Firestore).');
+      } else {
+        toast('Erreur de lecture des tickets : ' + (err?.message || err));
+      }
+
+      // Afficher l’état vide pour ne pas laisser la page blanche
+      elList.innerHTML = '';
+      elEmpty.classList.remove('d-none');
+    }
+  );
 }
 
 (async () => {

@@ -1,0 +1,47 @@
+/* ===== Thème SNCF modernisé ===== */
+:root {
+  --brand: #CA005D;
+  --brand-dark: #6A1B3F;
+  --bg-soft: #F4F4F4;
+  --ink: #333333;
+}
+
+html, body { height: 100%; }
+body { background: var(--bg-soft); color: var(--ink); }
+
+/* Topbar */
+.navbar.sncftop { background-color: var(--brand); }
+.navbar.sncftop .nav-link, .navbar.sncftop .navbar-brand, .navbar.sncftop .navbar-text { color: #fff !important; }
+.navbar.sncftop .nav-link.active, .navbar.sncftop .nav-link:hover { opacity: .9; }
+
+/* Brand logo */
+.brand-logo { height: 26px; width: auto; margin-right: .5rem; vertical-align: middle; }
+
+/* Buttons */
+.btn-primary { background-color: var(--brand); border-color: var(--brand); }
+.btn-primary:hover { background-color: var(--brand-dark); border-color: var(--brand-dark); }
+.btn-outline-primary { color: var(--brand); border-color: var(--brand); }
+.btn-outline-primary:hover { background-color: var(--brand); color: #fff; }
+
+/* Badges */
+.badge-status { font-weight: 500; }
+
+/* Cards */
+.card.soft { border: 1px solid #eaeaea; box-shadow: 0 4px 18px rgba(0,0,0,.05); }
+.card-header.soft { background: #fff; border-bottom: 1px solid #eee; }
+
+/* Breadcrumb */
+.breadcrumb { --bs-breadcrumb-divider: '›'; }
+
+/* Hero Title */
+.hero-title { font-weight: 700; letter-spacing: .2px; }
+.hero-sub { color: #6c757d; }
+
+/* Avatar */
+.avatar-circle { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,255,255,.25); color: #fff; display:flex; align-items:center; justify-content:center; font-weight:600; }
+
+/* Footer */
+footer { color: #6c757d; }
+
+/* Forms */
+textarea.form-control { min-height: 140px; }

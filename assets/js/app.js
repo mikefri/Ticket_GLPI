@@ -12,13 +12,13 @@ function $(id){ return document.getElementById(id); }
 function setText(el, text){ if (el) el.textContent = text ?? ''; }
 function show(el, yes = true){ if (el) el.classList.toggle('d-none', !yes); }
 
-// Références d'éléments (si absents sur une page, le code ignore)
+// Références (si absents sur une page, le code ignore)
 const elUser    = $('user-display');
 const btnLogin  = $('btn-login');
 const btnLogout = $('btn-logout');
-const navAdmin  = $('nav-admin');   // <li id="nav-admin" class="d-none">
-const avatar    = $('avatar');      // <div id="avatar" class="avatar-circle d-none">ED</div>
-const badge     = $('badge-admin'); // <span id="badge-admin" class="badge ... d-none">Admin</span>
+const navAdmin  = $('nav-admin');
+const avatar    = $('avatar');
+const badge     = $('badge-admin');
 
 // ---------- Helpers exportés ----------
 export function badgeForStatus(status) {
@@ -78,7 +78,7 @@ onAuthStateChanged(auth, async (user) => {
 
   if (!user) return;
 
-  // Affiche identité
+  // Identité
   const label = user.email || user.displayName || user.uid;
   setText(elUser, label);
   show(btnLogin, false);
@@ -91,16 +91,14 @@ onAuthStateChanged(auth, async (user) => {
     show(avatar, true);
   }
 
-  // Rôle admin (avec cache sessionStorage pour éviter une lecture à chaque navigation)
+  // Rôle admin (avec cache sessionStorage)
   let isAdmin = false;
   try {
     const key = `isAdmin:${user.uid}`;
     const cached = sessionStorage.getItem(key);
-    if (cached === '1') {
-      isAdmin = true;
-    } else if (cached === '0') {
-      isAdmin = false;
-    } else {
+    if (cached === '1') isAdmin = true;
+    else if (cached === '0') isAdmin = false;
+    else {
       isAdmin = await isUserAdmin(user.uid);
       sessionStorage.setItem(key, isAdmin ? '1' : '0');
     }
@@ -111,15 +109,14 @@ onAuthStateChanged(auth, async (user) => {
   // UI : badge + lien "Administration"
   show(navAdmin, isAdmin);
   if (badge) badge.classList.toggle('d-none', !isAdmin);
+
+  // Option: exposer le flag (utile si certaines pages veulent conditionner l'UI)
+  window.__isAdmin = isAdmin;
 });
 
 // ---------- Déconnexion ----------
 if (btnLogout) {
   btnLogout.addEventListener('click', async () => {
-    try {
-      await signOut(auth);
-    } finally {
-      window.location.href = 'login.html';
-    }
+    try { await signOut(auth); } finally { window.location.href = 'login.html'; }
   });
 }

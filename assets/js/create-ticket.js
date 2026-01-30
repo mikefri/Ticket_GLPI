@@ -4,16 +4,24 @@ import { requireAuth, toast } from './app.js';
 import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 /* --- Catégories par défaut (tu me donneras les listes finales plus tard) --- */
+
 const CATEGORY_MAP = {
   "Demande": [
-    "Dotation matériel", "Droits d’accès", "Installation logiciel",
-    "Prêt de matériel", "Changement / évolution", "Autre"
+    "Initialisation pasword RFX",
+    "Droits d'accès OT/RFX",
+    "Création d'emplacement",
+    "Changement / évolution",
+    "Autre"
   ],
   "Incident": [
-    "Application", "Logiciel", "Matériel",
-    "Réseau", "Sécurité", "Autre"
+    "Imprimante",
+    "Logiciel",
+    "PBI",
+    "Réseau",
+    "Autre"
   ]
 };
+
 
 /* --- Matrice SLA : Impact × Urgence -> Priorité + délai cible --- */
 const ORDER = { "Faible":1, "Moyen":2, "Fort":3, "Critique":4 };

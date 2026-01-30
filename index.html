@@ -5,73 +5,70 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Service ED Reflex</title>
 
-  <!-- Bootstrap -->
+  <!-- Bootstrap + Icônes -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
-  <!-- Style SNCF -->
+  <!-- Thème SNCF -->
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
-
 <body>
 
-<!-- NAVBAR -------------------------------------------------------------->
+<!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
     <a class="navbar-brand d-flex align-items-center" href="index.html">
-      <img src="assets/img/logo-technicentre.svg" class="brand-logo" alt="Technicentre de Nevers">
+      <img src="assets/img/logo-technicentre.svg" alt="Technicentre de Nevers" class="brand-logo"/>
       <span>Service ED Reflex</span>
     </a>
 
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain" aria-controls="navbarsMain" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
     </button>
 
     <div class="collapse navbar-collapse" id="navbarsMain">
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
         <li class="nav-item"><a class="nav-link active" href="index.html">Demander une assistance</a></li>
-        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes</a></li>
+        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d’assistance</a></li>
         <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
       </ul>
 
       <div class="d-flex align-items-center gap-2">
         <span class="navbar-text small d-none d-md-inline" id="user-display"></span>
-        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Connexion</a>
-        <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Déconnexion</button>
+        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
+        <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
         <div id="avatar" class="avatar-circle ms-2 d-none">ED</div>
       </div>
     </div>
   </div>
 </nav>
 
-<!-- MAIN -------------------------------------------------------------->
 <main class="container my-4">
 
   <h3 class="hero-title text-center mb-2">Service ED Reflex</h3>
-  <p class="hero-sub text-center mb-4">Sélectionnez d’abord le type de ticket que vous souhaitez ouvrir.</p>
+  <p class="hero-sub text-center mb-4">Sélectionnez d’abord le type de ticket. Les champs s’adapteront automatiquement.</p>
 
-  <!-- 1. CHOIX TYPE DE TICKET ----------------------------------------->
+  <!-- 1) Choix du type -->
   <div class="card soft mb-4">
     <div class="card-header soft"><strong>Type de ticket</strong></div>
-
     <div class="card-body">
-      <p class="mb-2 text-muted">Veuillez choisir une catégorie avant d’ouvrir un ticket.</p>
+      <p class="mb-2 text-muted">Demande = besoin standard (dotation, accès, installation…). Incident = interruption, dysfonctionnement ou panne.</p>
 
       <div class="vstack gap-2" id="ticket-type">
         <label class="form-check">
           <input class="form-check-input" type="radio" name="ttype" value="Demande">
-          <span class="form-check-label">Demande (dotation, accès, installation…)</span>
+          <span class="form-check-label">Demande</span>
         </label>
 
         <label class="form-check">
           <input class="form-check-input" type="radio" name="ttype" value="Incident">
-          <span class="form-check-label">Incident (application, matériel, réseau…)</span>
+          <span class="form-check-label">Incident</span>
         </label>
       </div>
     </div>
   </div>
 
-  <!-- 2. FORMULAIRE (MASQUÉ PAR DÉFAUT) ------------------------------->
+  <!-- 2) Formulaire (masqué tant qu’aucun type n’est choisi) -->
   <div class="card soft d-none" id="ticket-form-card">
     <div class="card-header soft d-flex align-items-center justify-content-between">
       <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>Ouvrir un ticket</h5>
@@ -80,59 +77,80 @@
 
     <div class="card-body">
       <form id="form-create">
-        <!-- TYPE (automatique) -->
+        <!-- Le type choisi ici -->
         <input type="hidden" id="type-hidden" value="">
 
-        <div class="mb-3">
-          <label class="form-label">Titre</label>
-          <input type="text" class="form-control" id="title" required placeholder="Ex : Problème application métier" maxlength="120">
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label">Description</label>
-          <textarea class="form-control" id="description" required placeholder="Décrivez le problème / contexte…"></textarea>
-        </div>
-
+        <!-- Catégories dynamiques (se remplit selon le type) -->
         <div class="row g-3">
           <div class="col-md-6">
             <label class="form-label">Catégorie</label>
             <select class="form-select" id="category" required>
-              <!-- Tu me donneras les catégories plus tard, celles-ci sont provisoires -->
               <option value="">Choisir…</option>
-              <option value="Matériel">Matériel</option>
-              <option value="Logiciel">Logiciel</option>
-              <option value="Accès">Accès</option>
-              <option value="Réseau">Réseau</option>
-              <option value="Autre">Autre</option>
+              <!-- Options injectées par JS -->
             </select>
           </div>
 
-          <div class="col-md-6">
-            <label class="form-label">Priorité</label>
-            <select class="form-select" id="priority" required>
+          <!-- Matrice Impact × Urgence -> priorité calculée -->
+          <div class="col-md-3">
+            <label class="form-label">Impact</label>
+            <select class="form-select" id="impact" required>
               <option value="Faible">Faible</option>
-              <option value="Normal" selected>Normal</option>
-              <option value="Haute">Haute</option>
+              <option value="Moyen">Moyen</option>
+              <option value="Fort">Fort</option>
+              <option value="Critique">Critique</option>
+            </select>
+          </div>
+
+          <div class="col-md-3">
+            <label class="form-label">Urgence</label>
+            <select class="form-select" id="urgency" required>
+              <option value="Faible">Faible</option>
+              <option value="Moyen" selected>Moyen</option>
+              <option value="Fort">Fort</option>
               <option value="Critique">Critique</option>
             </select>
           </div>
         </div>
 
-        <div class="mt-3 d-flex gap-2">
-          <button class="btn btn-primary" type="submit"><i class="bi bi-send me-1"></i>Créer le ticket</button>
-          <a class="btn btn-outline-primary" href="tickets.html"><i class="bi bi-card-list me-1"></i>Mes tickets</a>
+        <div class="row g-3 mt-1">
+          <div class="col-md-6">
+            <label class="form-label">Titre</label>
+            <input type="text" class="form-control" id="title" required placeholder="Ex : Problème application métier" maxlength="120">
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Priorité (calculée)</label>
+            <input type="text" class="form-control" id="priority" value="Normal" disabled>
+          </div>
         </div>
 
-        <p class="text-muted small mt-2 d-none" id="hint-login">
-          Vous devez être connecté pour créer un ticket.
-        </p>
+        <div class="mt-3">
+          <label class="form-label">Description</label>
+          <textarea class="form-control" id="description" required placeholder="Décrivez le besoin/le problème, le contexte, la localisation…"></textarea>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-between mt-3">
+          <div class="text-muted small">
+            Délai cible (SLA) : <strong id="sla-target">24 h</strong>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" type="submit">
+              <i class="bi bi-send me-1"></i>Créer le ticket
+            </button>
+            <a class="btn btn-outline-primary" href="tickets.html">
+              <i class="bi bi-card-list me-1"></i>Mes tickets
+            </a>
+          </div>
+        </div>
+
+        <p class="text-muted small mt-2 d-none" id="hint-login">Vous devez être connecté pour créer un ticket.</p>
       </form>
     </div>
   </div>
 
   <!-- Toast -->
   <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
-    <div id="toast" class="toast">
+    <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
       <div class="toast-header">
         <i class="bi bi-info-circle me-2"></i>
         <strong class="me-auto">Service ED Reflex</strong>
@@ -151,24 +169,9 @@
 
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-<script type="module">
-  /* Gestion affichage du formulaire selon type */
-
-  const radios = document.querySelectorAll('input[name="ttype"]');
-  const formCard = document.getElementById('ticket-form-card');
-  const typeHidden = document.getElementById('type-hidden');
-
-  radios.forEach(r => {
-    r.addEventListener('change', () => {
-      typeHidden.value = r.value;
-      formCard.classList.remove('d-none');
-      formCard.scrollIntoView({ behavior: 'smooth' });
-    });
-  });
-</script>
-
+<!-- APP commun (navbar/auth/toasts) -->
 <script type="module" src="assets/js/app.js"></script>
+<!-- Logique de la page (catégories dynamiques + SLA auto + création Firestore) -->
 <script type="module" src="assets/js/create-ticket.js"></script>
 
 </body>

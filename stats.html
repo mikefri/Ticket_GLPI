@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Méthodes Logistiques – Statistiques des tickets</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg sncftop">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center" href="index.html">
+      <img src="assets/img/logo-technicentre.svg" alt="Technicentre de Nevers" class="brand-logo"/>
+      <span class="ms-2">Service Méthodes Logistiques</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain">
+      <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarsMain">
+      <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
+        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d’assistance</a></li>
+        <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
+        <li class="nav-item d-none" id="nav-stats"><a class="nav-link active" href="stats.html">Statistiques</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-2">
+        <span class="navbar-text small d-none d-md-inline" id="user-display"></span>
+        <span id="badge-admin" class="badge rounded-pill bg-warning text-dark ms-1 d-none">
+          <i class="bi bi-shield-lock-fill me-1"></i>Admin
+        </span>
+        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
+        <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
+        <div id="avatar" class="avatar-circle ms-2 d-none">ED</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="container my-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Statistiques des tickets</h4>
+    <div class="d-flex gap-2 align-items-center">
+      <label for="period" class="small text-muted">Période&nbsp;:</label>
+      <select id="period" class="form-select form-select-sm" style="width:160px">
+        <option value="7">7 derniers jours</option>
+        <option value="30" selected>30 derniers jours</option>
+        <option value="90">90 derniers jours</option>
+        <option value="all">Toutes</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="row g-3" id="kpis">
+    <div class="col-6 col-md-4 col-lg-2"><div class="card text-center shadow-sm"><div class="card-body">
+      <div class="text-muted small">Total</div><div class="fs-4" id="kpi-total">–</div>
+    </div></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="card text-center shadow-sm"><div class="card-body">
+      <div class="text-muted small">Ouverts</div><div class="fs-4" id="kpi-open">–</div>
+    </div></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="card text-center shadow-sm"><div class="card-body">
+      <div class="text-muted small">En cours</div><div class="fs-4" id="kpi-progress">–</div>
+    </div></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="card text-center shadow-sm"><div class="card-body">
+      <div class="text-muted small">En attente</div><div class="fs-4" id="kpi-wait">–</div>
+    </div></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="card text-center shadow-sm"><div class="card-body">
+      <div class="text-muted small">Résolus</div><div class="fs-4" id="kpi-done">–</div>
+    </div></div></div>
+    <div class="col-6 col-md-4 col-lg-2"><div class="card text-center shadow-sm"><div class="card-body">
+      <div class="text-muted small">Fermés</div><div class="fs-4" id="kpi-closed">–</div>
+    </div></div></div>
+  </div>
+
+  <!-- Graphiques -->
+  <div class="row g-3 mt-1">
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-2">Répartition par statut</div>
+        <div class="card-body"><canvas id="chartStatus" height="220"></canvas></div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-2">Répartition par catégorie</div>
+        <div class="card-body"><canvas id="chartCategory" height="220"></canvas></div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-header py-2">Évolution (tickets / jour)</div>
+        <div class="card-body"><canvas id="chartTimeline" height="220"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="text-center py-4">
+  <small>© 2026 • Service Méthodes Logistiques • Firebase &amp; GitHub Pages</small>
+</footer>
+
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
+    <div class="toast-header">
+      <strong class="me-auto">Statistiques</strong>
+      <small>Info</small>
+      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Fermer"></button>
+    </div>
+    <div id="toast-body" class="toast-body">Message…</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<!-- Module de page -->
+<script type="module" src="assets/js/stats.js"></script>
+</body>
+</html>

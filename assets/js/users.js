@@ -1,6 +1,6 @@
 import './app.js';
 import { db } from './firebase-init.js';
-import { requireAdmin, toast } from './app.js';
+import { requireAuth, toast } from './app.js';
 import {
   collection, query, orderBy, limit, limitToLast, startAfter, endBefore,
   getDocs, setDoc, deleteDoc, doc
@@ -15,7 +15,7 @@ const pageInfo = document.getElementById('page-info');
 const PAGE_SIZE = 20;
 let lastDoc = null;     // dernier doc de la page courante (pour "next")
 let firstDoc = null;    // premier doc de la page courante (pour "prev")
-let stack = [];         // pile des "firstDoc" des pages déjà visitées (prev fiable)
+let history = [];       // pile des firstDoc des pages visitées
 let adminsSet = new Set();
 
 /* --- Helper sécurité rendu HTML --- */
@@ -69,67 +69,54 @@ async function loadAdmins() {
  *  - prev  : endBefore(firstDoc) + limitToLast(PAGE_SIZE)
  */
 async function loadPage(direction = 'first'){
-  try {
-    await loadAdmins();
-    console.log('[users] loadPage direction=', direction);
+  await loadAdmins();
 
-    const base = query(collection(db, 'users'), orderBy('email'));
-    let q;
+  const base = query(collection(db, 'users'), orderBy('email'));
+  let q;
 
-    if (direction === 'first') {
-      q = query(base, limit(PAGE_SIZE));
-    } else if (direction === 'next' && lastDoc) {
-      q = query(base, startAfter(lastDoc), limit(PAGE_SIZE));
-    } else if (direction === 'prev' && stack.length > 1 && firstDoc) {
-      q = query(base, endBefore(firstDoc), limitToLast(PAGE_SIZE));
-    } else {
-      // rien à faire (pas d’historique pour prev, ou pas de lastDoc pour next)
-      return;
-    }
-
-    const snap = await getDocs(q);
-    console.log('[users] snap.size =', snap.size);
-
-    elBody.innerHTML = '';
-    if (snap.empty) {
-      pageInfo.textContent = 'Aucun utilisateur';
-      btnNext.disabled = true;
-      btnPrev.disabled = stack.length <= 1;
-      return;
-    }
-
-    const rows = [];
-    snap.forEach(d => {
-      const u = d.data();
-      u.uid = d.id;
-      rows.push(row(u, adminsSet.has(d.id)));
-    });
-
-    elBody.innerHTML = rows.join('');
-
-    // Marqueurs de pagination
-    firstDoc = snap.docs[0];
-    lastDoc  = snap.docs[snap.docs.length - 1];
-
-    if (direction === 'first') {
-      stack = [firstDoc];
-    } else if (direction === 'next') {
-      stack.push(firstDoc);
-    } else if (direction === 'prev') {
-      // on remonte d'une page : dépile l’ancienne "firstDoc"
-      stack.pop();
-      // par robustesse : met en cohérence l’entrée courante
-      stack[stack.length - 1] = firstDoc;
-    }
-
-    pageInfo.textContent = `Affichés: ${snap.size}`;
-    btnPrev.disabled = stack.length <= 1;
-    btnNext.disabled = snap.size < PAGE_SIZE;
-  } catch (err) {
-    console.error('[users] loadPage error:', err);
-    toast('Lecture des utilisateurs refusée ou erreur (voir console)');
-    pageInfo.textContent = 'Erreur de lecture';
+  if (direction === 'first') {
+    q = query(base, limit(PAGE_SIZE));
+  } else if (direction === 'next' && lastDoc) {
+    q = query(base, startAfter(lastDoc), limit(PAGE_SIZE));
+  } else if (direction === 'prev' && history.length > 1 && firstDoc) {
+    q = query(base, endBefore(firstDoc), limitToLast(PAGE_SIZE));
+  } else {
+    return;
   }
+
+  const snap = await getDocs(q);
+
+  elBody.innerHTML = '';
+  if (snap.empty) {
+    pageInfo.textContent = 'Aucun utilisateur';
+    btnNext.disabled = true;
+    btnPrev.disabled = history.length <= 1;
+    return;
+  }
+
+  const rows = [];
+  snap.forEach(d => {
+    const u = d.data();
+    u.uid = d.id;
+    rows.push(row(u, adminsSet.has(d.id)));
+  });
+  elBody.innerHTML = rows.join('');
+
+  firstDoc = snap.docs[0];
+  lastDoc  = snap.docs[snap.docs.length - 1];
+
+  if (direction === 'first') {
+    history = [firstDoc];
+  } else if (direction === 'next') {
+    history.push(firstDoc);
+  } else if (direction === 'prev') {
+    history.pop();
+    history[history.length - 1] = firstDoc;
+  }
+
+  pageInfo.textContent = `Affichés: ${snap.size}`;
+  btnPrev.disabled = history.length <= 1;
+  btnNext.disabled = snap.size < PAGE_SIZE;
 }
 
 document.addEventListener('click', async (e) => {
@@ -148,7 +135,6 @@ document.addEventListener('click', async (e) => {
       await setDoc(doc(db, 'admins', uid), {});
       toast('Utilisateur promu administrateur');
     }
-    // recharge depuis la première page (simple et sûr)
     await loadPage('first');
   } catch (err) {
     console.error('[users] toggle admin', err);
@@ -162,7 +148,6 @@ btnNext?.addEventListener('click', () => loadPage('next'));
 btnPrev?.addEventListener('click', () => loadPage('prev'));
 
 elSearch?.addEventListener('input', async () => {
-  // version simple (client‑side) : filtre sur les lignes déjà chargées
   const q = (elSearch.value || '').toLowerCase();
   [...elBody.querySelectorAll('tr')].forEach(tr => {
     const txt = tr.textContent.toLowerCase();
@@ -171,9 +156,28 @@ elSearch?.addEventListener('input', async () => {
 });
 
 (async () => {
-  // Contrôle propre : auth + rôle admin (avec cache) + UI
-  const user = await requireAdmin(true);
+  const user = await requireAuth(true);
   if (!user) return;
+
+  // Petite attente pour que app.js fixe window.__isAdmin via onAuthStateChanged
+  await new Promise((resolve) => {
+    let waited = 0;
+    const step = 20;
+    const max  = 2000;
+    const t = setInterval(() => {
+      if (typeof window.__isAdmin === 'boolean' || waited >= max) {
+        clearInterval(t);
+        resolve();
+      }
+      waited += step;
+    }, step);
+  });
+
+  if (window.__isAdmin !== true) {
+    toast('Accès admin requis');
+    setTimeout(() => window.location.href = 'tickets.html', 800);
+    return;
+  }
 
   try {
     await loadPage('first');

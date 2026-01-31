@@ -18,8 +18,6 @@ const btnLogin  = $('btn-login');
 const btnLogout = $('btn-logout');
 const navAdmin  = $('nav-admin');   // <li id="nav-admin" class="d-none">...</li>
 const navStats  = $('nav-stats');   // <li id="nav-stats" class="d-none">...</li> (optionnel)
-const navUsers = document.getElementById('nav-users');
-
 const avatar    = $('avatar');      // <div id="avatar" class="avatar-circle d-none"></div>
 const badge     = $('badge-admin'); // <span id="badge-admin" class="badge ... d-none">Admin</span>
 
@@ -74,7 +72,6 @@ function setAdminUI(isAdmin) {
   // Affiche/masque : lien "Administration", lien "Statistiques" et badge
   show(navAdmin, !!isAdmin);
   if (navStats) show(navStats, !!isAdmin);
-  if (navUsers) navUsers.classList.toggle('d-none', !isAdmin);
   if (badge)    badge.classList.toggle('d-none', !isAdmin);
 
   // Expose un flag global si certaines pages veulent conditionner l’UI côté client

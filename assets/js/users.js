@@ -2,7 +2,7 @@
 // Page Utilisateurs & Rôles
 // - Liste + pagination Firestore
 // - Promotion / Retrait admin
-// - Création d’utilisateur via Cloud Function adminCreateUser (Option B)
+// - Création d’utilisateur par invitation e-mail (Email Link, sans Cloud Functions)
 // - Accès réservé aux admins (vérification directe Firestore)
 // ============================================================
 
@@ -12,20 +12,22 @@ import { requireAuth, toast } from './app.js';
 
 import {
   collection, query, orderBy, limit, limitToLast, startAfter, endBefore,
-  getDocs, getDoc, setDoc, deleteDoc, doc
+  getDocs, getDoc, setDoc, deleteDoc, doc, addDoc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import {
-  getFunctions, httpsCallable
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-functions.js";
+  getAuth, sendSignInLinkToEmail
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ------------------------------------
-// (Option) Région des Cloud Functions
-// Si ta Function est déployée en europe-west1 (recommandé en France),
-// mets: const FUNCTIONS_REGION = 'europe-west1';
-// Sinon laisse null pour us-central1 (défaut).
+// Paramètres du lien magique (Email Link)
+// - url : page qui terminera la connexion via signInWithEmailLink()
+// - handleCodeInApp: true est requis côté Web
 // ------------------------------------
-const FUNCTIONS_REGION = null;
+const actionCodeSettings = {
+  url: `${location.origin}/login.html`, // adapte si tu préfères index.html
+  handleCodeInApp: true
+};
 
 // ------------------------------------
 // Références DOM
@@ -36,12 +38,12 @@ const btnPrev  = document.getElementById('btn-prev');
 const btnNext  = document.getElementById('btn-next');
 const pageInfo = document.getElementById('page-info');
 
-// UI Création utilisateur (Option B)
+// UI Création utilisateur (Invitation)
 const btnOpenCreate = document.getElementById('btn-open-create');
 const formCreate    = document.getElementById('form-create-user');
 const elCuEmail     = document.getElementById('cu-email');
 const elCuName      = document.getElementById('cu-displayName');
-const elCuAdmin     = document.getElementById('cu-makeAdmin');
+const elCuAdmin     = document.getElementById('cu-makeAdmin');   // Conservé UI (info), pas d’effet direct sans serveur
 const elCuCanCreate = document.getElementById('cu-canCreate');
 const elCuResult    = document.getElementById('cu-result');
 
@@ -91,7 +93,7 @@ function row(user, isAdmin){
       </td>
       <td class="text-end">
         <button class="btn btn-sm ${isAdmin ? 'btn-outline-danger' : 'btn-outline-primary'}"
-                data-action="toggle-admin" data-uid="${user.uid}">
+                data-action="toggle-admin" data-uid="${esc(user.uid)}">
           ${isAdmin ? 'Retirer admin' : 'Promouvoir admin'}
         </button>
       </td>
@@ -210,12 +212,12 @@ elSearch?.addEventListener('input', async () => {
 });
 
 // ============================================================
-// Option B - Création d'utilisateur via Cloud Function
-//  - Nécessite le bouton + modal dans users.html
-//  - adminCreateUser déployée côté serveur
+// Invitation par e-mail (Email Link) — sans Cloud Functions
+// - Nécessite le bouton + modal dans users.html
+// - L’utilisateur apparaitra après sa première connexion via le lien
+// - (Optionnel) journalisation dans la collection 'invites'
 // ============================================================
 let modalCreate;
-let functions;
 
 function initCreateModal() {
   // bootstrap.bundle.min.js doit être chargé
@@ -227,11 +229,6 @@ function initCreateModal() {
   if (!modalCreate) {
     modalCreate = new bootstrap.Modal(document.getElementById('modal-create-user'));
   }
-
-if (!functions) {
-  functions = getFunctions(undefined, 'europe-west1');
-}
-
   return true;
 }
 
@@ -243,7 +240,7 @@ btnOpenCreate?.addEventListener('click', (e) => {
   // reset form
   if (elCuEmail) elCuEmail.value = '';
   if (elCuName) elCuName.value = '';
-  if (elCuAdmin) elCuAdmin.checked = false;
+  if (elCuAdmin) elCuAdmin.checked = false;      // indicatif (pas d’effet auto sans serveur)
   if (elCuCanCreate) elCuCanCreate.checked = true;
   if (elCuResult) {
     elCuResult.classList.add('d-none');
@@ -252,59 +249,55 @@ btnOpenCreate?.addEventListener('click', (e) => {
   modalCreate.show();
 });
 
-// Soumission du formulaire (appel Cloud Function)
+// Soumission du formulaire (envoi du lien magique)
 formCreate?.addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!initCreateModal()) return;
 
   const email = (elCuEmail?.value || '').trim();
   const displayName = (elCuName?.value || '').trim();
-  const makeAdmin = !!elCuAdmin?.checked;
+  const makeAdmin = !!elCuAdmin?.checked;            // on peut le journaliser, mais la promo se fera manuellement ensuite
   const canCreateTickets = !!elCuCanCreate?.checked;
 
-  if (!email) {
-    toast('Email requis');
-    return;
-  }
+  if (!email) { toast('Email requis'); return; }
 
   const btn = document.getElementById('cu-submit');
   if (btn) btn.disabled = true;
 
   try {
-    const call = httpsCallable(functions, 'adminCreateUser');
-    const res = await call({ email, displayName, makeAdmin, canCreateTickets });
+    // (Optionnel) Journalise l’invitation pour suivi interne
+    await addDoc(collection(db, 'invites'), {
+      email,
+      displayName,
+      canCreateTickets,
+      makeAdmin,               // note: la promotion admin devra être faite via le bouton de la liste
+      createdBy: (await requireAuth())?.uid || null,
+      createdAt: serverTimestamp()
+    });
 
-    const { uid, resetLink, promoted } = res.data || {};
+    // Envoi du lien de connexion par e-mail (passwordless)
+    const auth = getAuth();
+    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+
+    // Si l’utilisateur termine sur le même device, on stocke l’email pour la complétion
+    window.localStorage.setItem('emailForSignIn', email);
+
+    // Feedback UI
     if (elCuResult) {
       elCuResult.classList.remove('d-none');
       elCuResult.innerHTML = `
-        <div>Utilisateur créé: <code>${esc(uid || '')}</code></div>
-        <div class="mt-2">Lien de mot de passe: ${esc(resetLink || '')}Ouvrir</a></div>
-        <div class="mt-1">
-          toggle-copy
-            Copier le lien
-          </button>
-        </div>
-        ${promoted ? '<div class="mt-1 text-success">Utilisateur promu admin</div>' : ''}
-      `;
-
-      // Bouton copier
-      const copyBtn = document.getElementById('btn-copy-reset');
-      copyBtn?.addEventListener('click', async () => {
-        try {
-          await navigator.clipboard.writeText(resetLink || '');
-          toast('Lien copié dans le presse-papiers');
-        } catch {
-          toast('Copie impossible (permissions navigateur)');
-        }
-      });
+        <div>Invitation envoyée à <strong>${esc(email)}</strong>.</div>
+        <div class="mt-2 small text-muted">
+          L’utilisateur cliquera le lien reçu par e‑mail pour se connecter.
+          Son profil apparaîtra ensuite dans la liste.
+        </div>`;
     }
+    toast('Invitation envoyée');
 
-    // Recharge la page 1 pour voir le nouvel utilisateur
-    await loadPage('first');
+    // Ici, on NE recharge PAS la liste : l’utilisateur apparaîtra après sa première connexion
   } catch (err) {
-    console.error('[users] adminCreateUser error:', err);
-    const msg = err?.message || err?.code || 'Création refusée (droits / domaines / quotas ?)';
+    console.error('[users] invite error:', err);
+    const msg = err?.message || 'Envoi impossible (vérifier domaine autorisé / méthode activée)';
     toast(msg);
   } finally {
     if (btn) btn.disabled = false;

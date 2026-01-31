@@ -4,17 +4,21 @@
   <meta charset="utf-8">
   <title>Connexion — Centre d’assistance – Méthodes Logistiques</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Bootstrap uniquement si tu l’utilises ailleurs ; sinon tu peux le retirer -->
+
+  <!-- Bootstrap (facultatif si déjà chargé ailleurs) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css">
+
+  <!-- Styles globaux -->
+  <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
 
+<!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
     <a class="navbar-brand d-flex align-items-center" href="index.html">
       <img src="assets/img/GLPI.png" alt="" class="brand-logo"/>
-      <span>Centre d’assistance – Méthodes Logistiques</span>
+      <span class="ms-2">Centre d’assistance – Méthodes Logistiques</span>
     </a>
   </div>
 </nav>
@@ -24,34 +28,179 @@
     <div class="card-body p-4">
       <h4 class="mb-3">Connexion</h4>
 
-      <form id="form-login">
+      <!-- Message d’état -->
+      <div id="login-status" class="alert d-none" role="status" aria-live="polite"></div>
+
+      <!-- Bloc affiché quand on détecte un lien e-mail à compléter -->
+      <div id="email-link-hint" class="alert alert-info d-none">
+        Détection d’un <strong>lien de connexion</strong> par e‑mail… Veuillez patienter, la connexion se termine automatiquement.
+      </div>
+
+      <!-- Connexion classique Email + Mot de passe -->
+      <form id="form-login" novalidate>
         <div class="mb-3">
-          <label class="form-label">Email</label>
+          <label class="form-label" for="email">Email</label>
           <input type="email" class="form-control" id="email" required autocomplete="username">
         </div>
         <div class="mb-3">
-          <label class="form-label">Mot de passe</label>
+          <label class="form-label" for="password">Mot de passe</label>
           <input type="password" class="form-control" id="password" required autocomplete="current-password">
         </div>
 
         <div class="d-flex gap-2">
-          <button class="btn btn-primary" type="submit">Se connecter</button>
-          
+          <button class="btn btn-primary" type="submit" id="btn-login">Se connecter</button>
+          <!-- Si tu veux plus tard proposer un flux “Recevoir un lien” self-service :
+               Ajoute un bouton ici qui appelle sendSignInLinkToEmail(). Pour l’instant,
+               l’invitation par lien est envoyée côté Admin depuis users.html. -->
         </div>
       </form>
     </div>
   </div>
 </main>
 
-<!-- Optionnel : Bootstrap JS si tu utilises les toasts/modales -->
+<!-- Bootstrap JS (si tu utilises toasts/modales) -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
-
-<link rel="stylesheet" href="assets/css/styles.css">
+<!-- Initialisation Firebase de ton projet -->
 <script type="module" src="assets/js/firebase-init.js"></script>
-<script type="module" src="assets/js/app.js"></script>
-<script type="module" src="assets/js/login.js"></script>
 
+<!-- Script de connexion (Email Link + Email/Mot de passe) -->
+<script type="module">
+  // --- Imports Firebase (SDK Web) ---
+  import { app } from './assets/js/firebase-init.js';
+
+  import {
+    getAuth,
+    isSignInWithEmailLink,
+    signInWithEmailLink,
+    signInWithEmailAndPassword
+  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+  import {
+    getFirestore,
+    doc, getDoc, setDoc
+  } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  // --- Références ---
+  const auth = getAuth(app);
+  const db   = getFirestore(app);
+
+  const form         = document.getElementById('form-login');
+  const elEmail      = document.getElementById('email');
+  const elPassword   = document.getElementById('password');
+  const elStatus     = document.getElementById('login-status');
+  const elEmailHint  = document.getElementById('email-link-hint');
+  const btnLogin     = document.getElementById('btn-login');
+
+  // --- Helpers UI ---
+  function showStatus(msg, type = 'info') {
+    if (!elStatus) return;
+    elStatus.className = `alert alert-${type}`;
+    elStatus.textContent = msg;
+    elStatus.classList.remove('d-none');
+  }
+  function hideStatus() {
+    elStatus?.classList.add('d-none');
+  }
+  function showHint() {
+    elEmailHint?.classList.remove('d-none');
+  }
+  function disableForm(disabled) {
+    if (btnLogin) btnLogin.disabled = disabled;
+    if (elEmail) elEmail.disabled = disabled;
+    if (elPassword) elPassword.disabled = disabled;
+  }
+
+  // --- Création du doc users/{uid} si manquant ---
+  async function ensureUserDoc(user, fallbackEmail = '') {
+    try {
+      const ref = doc(db, 'users', user.uid);
+      const snap = await getDoc(ref);
+      if (!snap.exists()) {
+        await setDoc(ref, {
+          email: user.email || fallbackEmail || '',
+          displayName: user.displayName || '',
+          canCreateTickets: true, // par défaut
+          createdAt: new Date()
+        }, { merge: true });
+      }
+    } catch (e) {
+      // On ne bloque pas la connexion pour autant, mais on logge
+      console.error('[login] ensureUserDoc error:', e);
+    }
+  }
+
+  // --- Redirection selon rôle (admin -> users.html, sinon tickets.html) ---
+  async function redirectAfterSignIn(uid) {
+    try {
+      const adminSnap = await getDoc(doc(db, 'admins', uid));
+      if (adminSnap.exists()) {
+        window.location.replace('users.html');
+      } else {
+        window.location.replace('tickets.html');
+      }
+    } catch (e) {
+      console.error('[login] redirect check error:', e);
+      // Par défaut : tickets
+      window.location.replace('tickets.html');
+    }
+  }
+
+  // --- Compléter la connexion par Lien e‑mail (si détecté) ---
+  async function completeEmailLinkIfNeeded() {
+    if (!isSignInWithEmailLink(auth, window.location.href)) return;
+
+    showHint();
+    disableForm(true);
+
+    try {
+      // Si l’utilisateur finalise sur un autre device, on lui demande son email
+      let email = window.localStorage.getItem('emailForSignIn');
+      if (!email) {
+        email = window.prompt('Saisis ton email pour terminer la connexion :') || '';
+      }
+
+      const cred = await signInWithEmailLink(auth, email.trim(), window.location.href);
+      window.localStorage.removeItem('emailForSignIn');
+
+      await ensureUserDoc(cred.user, email);
+      await redirectAfterSignIn(cred.user.uid);
+    } catch (err) {
+      console.error('[login] email link completion error:', err);
+      showStatus(err?.message || 'Impossible de terminer la connexion par lien e‑mail.', 'danger');
+      disableForm(false);
+    }
+  }
+
+  // --- Connexion classique Email + Mot de passe ---
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideStatus();
+
+    const email = (elEmail?.value || '').trim();
+    const password = elPassword?.value || '';
+
+    if (!email || !password) {
+      showStatus('Email et mot de passe requis.', 'warning');
+      return;
+    }
+
+    disableForm(true);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      await ensureUserDoc(cred.user, email);
+      await redirectAfterSignIn(cred.user.uid);
+    } catch (err) {
+      console.error('[login] email/password error:', err);
+      // Messages fréquents : auth/user-not-found, auth/wrong-password, auth/too-many-requests…
+      showStatus(err?.message || 'Connexion refusée. Vérifie tes identifiants.', 'danger');
+      disableForm(false);
+    }
+  });
+
+  // --- Démarrage ---
+  completeEmailLinkIfNeeded().catch(console.error);
+</script>
 
 </body>
 </html>

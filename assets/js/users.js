@@ -25,7 +25,7 @@ import {
 // - handleCodeInApp: true est requis côté Web
 // ------------------------------------
 const actionCodeSettings = {
-  url: `${location.origin}/login.html`, // adapte si tu préfères index.html
+  url: `${location.origin}/Ticket_GLPI/login.html`, // adapte si tu préfères index.html
   handleCodeInApp: true
 };
 

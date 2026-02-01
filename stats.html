@@ -13,27 +13,61 @@
 
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
+    <!-- Logo + titre -->
     <a class="navbar-brand d-flex align-items-center" href="index.html">
-      <img src="assets/img/GLPI.png" alt="" class="brand-logo"/>
-      <span class="ms-2">Centre d’assistance</span>
+      <img src="assets/img/GLPI.png" alt="Logo" class="brand-logo me-2" />
+      <span class="fw-semibold">Centre d’assistance</span>
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain">
-      <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
+
+    <!-- Burger mobile -->
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain"
+            aria-controls="navbarsMain" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon" style="filter: invert(1);"></span>
     </button>
+
+    <!-- Contenu -->
     <div class="collapse navbar-collapse" id="navbarsMain">
+      <!-- Liens principaux (centrés) -->
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
-        <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
-        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d’assistance</a></li>
-        <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
-        <li class="nav-item d-none" id="nav-stats"><a class="nav-link active" href="stats.html">Statistiques</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="index.html">Demander une assistance</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="tickets.html">Mes demandes</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="profil.html">Mon profil</a>
+        </li>
+        <!-- Liens admin (masqués par défaut, JS les affiche) -->
+        <li class="nav-item d-none" id="nav-admin">
+          <a class="nav-link" href="admin.html">Administration</a>
+        </li>
+        <li class="nav-item d-none" id="nav-users">
+          <a class="nav-link" href="users.html">Utilisateurs & Rôles</a>
+        </li>
+        <li class="nav-item d-none" id="nav-stats">
+          <a class="nav-link" href="stats.html">Statistiques</a>
+        </li>
       </ul>
-      <div class="d-flex align-items-center gap-2">
-         <span id="badge-admin" class="badge rounded-pill bg-warning text-dark ms-1 d-none">
+
+      <!-- Zone droite : connexion / logout / avatar / badge / nom -->
+      <div class="d-flex align-items-center gap-3 ms-lg-3">
+        <!-- Nom utilisateur (quand connecté) -->
+        <span class="navbar-text small d-none" id="user-display">
+          <!-- JS remplira : Bonjour Michael F -->
+        </span>
+
+        <!-- Badge Admin -->
+        <span id="badge-admin" class="badge rounded-pill bg-warning text-dark d-none">
           <i class="bi bi-shield-lock-fill me-1"></i>Admin
         </span>
+
+        <!-- Avatar -->
+        <div id="avatar" class="avatar-circle d-none"></div>
+
+        <!-- Boutons connexion/déconnexion -->
         <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
         <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
-        <div id="avatar" class="avatar-circle ms-2 d-none">ED</div>
       </div>
     </div>
   </div>

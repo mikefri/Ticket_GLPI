@@ -1,6 +1,7 @@
 // ------------------------------------------------------------
 // Page Administration : liste les tickets, mise à jour de statut avec historique,
-// suppression avec confirmation. Accès réservé aux admins.
+// affichage historique via modal, suppression avec nettoyage history
+// Accès réservé aux admins.
 // ------------------------------------------------------------
 
 import './app.js'; // monte navbar + badge + helpers
@@ -17,7 +18,9 @@ import {
   doc,
   getDoc,
   addDoc,
-  serverTimestamp
+  serverTimestamp,
+  getDocs,
+  writeBatch
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ---------- Eléments ----------
@@ -47,6 +50,36 @@ async function isUserAdmin(uid) {
   }
 }
 
+// Helper : suppression récursive d'une collection (par batches simples)
+async function deleteCollection(collectionRef, batchSize = 400) {
+  const querySnapshot = await getDocs(collectionRef);
+  if (querySnapshot.empty) return;
+
+  const batch = writeBatch(db);
+  let ops = 0;
+
+  querySnapshot.forEach((docSnap) => {
+    batch.delete(docSnap.ref);
+    ops++;
+
+    if (ops >= batchSize) {
+      // On commit partiel (limite 500 ops/batch)
+      batch.commit().catch(err => console.error("Batch commit error:", err));
+      return; // Pour éviter de continuer la boucle après commit
+    }
+  });
+
+  // Commit final si reste des ops
+  if (ops > 0) {
+    await batch.commit().catch(err => console.error("Final batch error:", err));
+  }
+
+  // Si > batchSize → on rappelle récursivement (rare pour history)
+  if (querySnapshot.size >= batchSize) {
+    await deleteCollection(collectionRef, batchSize);
+  }
+}
+
 // Rendu d'une carte ticket
 function renderItem(d) {
   const t = d.data();
@@ -56,7 +89,6 @@ function renderItem(d) {
     `${badgeForStatus(t.status)} ${badgeForPriority(t.priority)} ` +
     `<span class="ms-2 text-muted small">${t.category}${t.type ? ' • ' + t.type : ''}</span>`;
 
-  // Information de prise en charge
   let takenInfo = '';
   if (t.takenBy && t.takenAt) {
     const takenDate = t.takenAt.toDate ? t.takenAt.toDate() : new Date(t.takenAt);
@@ -69,14 +101,19 @@ function renderItem(d) {
   const meta =
     `Par ${t.email || t.createdBy} • ${formatDate(t.createdAt)} • #${id}`;
 
-  // Bouton suppression seulement si admin
-  const deleteBtn = (window.__isAdmin)
+  const deleteBtn = window.__isAdmin
     ? `<button type="button" class="btn btn-outline-danger btn-sm"
                title="Supprimer ce ticket" aria-label="Supprimer ce ticket"
                data-delete="${id}">
          <i class="bi bi-trash"></i>
        </button>`
     : '';
+
+  const historyBtn = `
+    <button type="button" class="btn btn-link btn-sm p-0 mt-2 text-decoration-none"
+            data-history="${id}" title="Voir l’historique des changements de statut">
+      <i class="bi bi-clock-history me-1"></i> Historique
+    </button>`;
 
   return `
   <div class="card soft">
@@ -97,6 +134,7 @@ function renderItem(d) {
         </div>
       </div>
       <p class="card-text mt-2">${(t.description||'').replace(/</g,'&lt;')}</p>
+      ${historyBtn}
     </div>
   </div>`;
 }
@@ -116,11 +154,10 @@ function refreshList() {
 
   elList.innerHTML = '';
   show(elEmpty, filtered.length === 0);
-
   filtered.forEach(d => elList.insertAdjacentHTML('beforeend', renderItem(d)));
 }
 
-// ---------- Listeners (délégation) ----------
+// ---------- Listeners ----------
 filterStatus?.addEventListener('change', refreshList);
 inputSearch?.addEventListener('input', refreshList);
 
@@ -141,44 +178,35 @@ elList.addEventListener('change', async (e) => {
   try {
     const ticketRef = doc(db, 'tickets', id);
 
-    // Préparer l'entrée d'historique
     const historyEntry = {
       field:     'status',
       oldValue:  oldStatus,
       newValue:  newStatus,
       changedBy: changedBy,
       changedAt: serverTimestamp(),
-      // comment: ""   ← à décommenter si tu veux ajouter un commentaire plus tard
     };
 
-    // Mise à jour du ticket principal
     const updateData = { status: newStatus };
 
-    // Logique existante de prise en charge
     if (oldStatus === 'Ouvert' && newStatus === 'En cours') {
       updateData.takenBy = changedBy;
       updateData.takenAt = serverTimestamp();
     }
 
     await updateDoc(ticketRef, updateData);
+    await addDoc(collection(ticketRef, 'history'), historyEntry);
 
-    // Ajout de l'historique
-    await addDoc(
-      collection(ticketRef, 'history'),
-      historyEntry
-    );
-
-    toast(`Statut mis à jour : ${newStatus}`);
+    toast(`Statut → ${newStatus}`);
     sel.setAttribute('data-current', newStatus);
 
   } catch (err) {
     console.error('[admin] update + history failed', err);
-    toast('Échec de la mise à jour : ' + (err?.code || err?.message || 'Erreur inconnue'));
-    sel.value = oldStatus; // rollback visuel
+    toast('Échec mise à jour : ' + (err?.code || err?.message || 'Erreur'));
+    sel.value = oldStatus;
   }
 });
 
-// Suppression
+// Suppression avec nettoyage history
 elList.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-delete]');
   if (!btn) return;
@@ -192,18 +220,79 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
   if (!pendingDeleteId) return;
 
   try {
-    await deleteDoc(doc(db, 'tickets', pendingDeleteId));
-    toast('Ticket supprimé');
+    const ticketRef = doc(db, 'tickets', pendingDeleteId);
+    const historyCol = collection(ticketRef, 'history');
+
+    // 1. Nettoyage de l'historique
+    await deleteCollection(historyCol);
+
+    // 2. Suppression du ticket
+    await deleteDoc(ticketRef);
+
+    toast('Ticket et historique supprimés');
   } catch (e) {
-    console.error('[admin] delete', e);
-    toast('Suppression refusée : ' + (e?.code || e?.message || e));
+    console.error('[admin] delete + cleanup failed', e);
+    toast('Échec suppression : ' + (e?.code || e?.message || 'Erreur'));
   } finally {
     pendingDeleteId = null;
     modalDelete?.hide();
   }
 });
 
-// ---------- Initialisation ----------
+// Affichage historique
+elList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-history]');
+  if (!btn) return;
+
+  const ticketId = btn.getAttribute('data-history');
+  const contentEl = document.getElementById('history-content');
+  if (!contentEl) return;
+
+  contentEl.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div>';
+
+  const modal = new bootstrap.Modal(document.getElementById('historyModal'));
+  modal.show();
+
+  try {
+    const histRef = collection(db, 'tickets', ticketId, 'history');
+    const qHist = query(histRef, orderBy('changedAt', 'desc'));
+    const snap = await getDocs(qHist);
+
+    if (snap.empty) {
+      contentEl.innerHTML = '<p class="text-muted text-center py-3">Aucun changement de statut enregistré.</p>';
+      return;
+    }
+
+    let html = '';
+    snap.forEach(docSnap => {
+      const h = docSnap.data();
+      const dateStr = h.changedAt
+        ? formatDate(h.changedAt.toDate ? h.changedAt.toDate() : new Date(h.changedAt))
+        : 'Date inconnue';
+
+      html += `
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-baseline">
+            <strong>${h.changedBy || 'Système'}</strong>
+            <small class="text-muted">${dateStr}</small>
+          </div>
+          <div class="mt-1">
+            ${h.oldValue ? `<span class="badge bg-secondary me-2">${h.oldValue}</span>` : '(nouveau)'}
+            <i class="bi bi-arrow-right mx-2"></i>
+            <span class="badge bg-primary">${h.newValue}</span>
+          </div>
+        </div>`;
+    });
+
+    contentEl.innerHTML = html;
+
+  } catch (err) {
+    console.error('[admin] load history failed', err);
+    contentEl.innerHTML = `<div class="alert alert-danger">Impossible de charger l’historique : ${err.message || err}</div>`;
+  }
+});
+
+// ---------- Bootstrap ----------
 (async () => {
   const user = await requireAuth(true);
   if (!user) return;
@@ -215,7 +304,6 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
     return;
   }
 
-  // Requête temps réel – tous les tickets
   const qAll = query(collection(db, 'tickets'), orderBy('createdAt', 'desc'));
 
   onSnapshot(qAll, (snap) => {
@@ -226,7 +314,7 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
     if (err.code === 'permission-denied') {
       toast('Permission refusée (vérifiez les règles Firestore)');
     } else if (err.code === 'failed-precondition') {
-      toast('Index manquant pour cette requête (console Firebase)');
+      toast('Index manquant (console Firebase)');
     } else {
       toast('Erreur : ' + (err.message || err));
     }

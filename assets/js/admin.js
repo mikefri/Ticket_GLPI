@@ -1,4 +1,4 @@
-// Page Administration – affiche le NOM (displayName) au lieu de l'email ou "Admin"
+// Page Administration – version robuste (priorité NOM partout)
 
 import './app.js';
 import { db } from './firebase-init.js';
@@ -10,96 +10,97 @@ import {
   getDocs, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Éléments DOM
+// ────────────────────────────────────────────────
+// DOM
+// ────────────────────────────────────────────────
 const elList       = document.getElementById('admin-list');
 const elEmpty      = document.getElementById('admin-empty');
 const filterStatus = document.getElementById('filter-status');
 const inputSearch  = document.getElementById('search');
 
+// ────────────────────────────────────────────────
 // État
+// ────────────────────────────────────────────────
 let data = [];
 let pendingDeleteId = null;
 let modalDelete = null;
 
+// ────────────────────────────────────────────────
 // Utils
-function show(el, yes = true) { if (el) el.classList.toggle('d-none', !yes); }
+// ────────────────────────────────────────────────
+function show(el, yes = true) {
+  if (el) el.classList.toggle('d-none', !yes);
+}
 
 async function isUserAdmin(uid) {
   try {
     const snap = await getDoc(doc(db, 'admins', uid));
     return snap.exists();
   } catch (e) {
-    console.error('[admin] isUserAdmin failed:', e);
+    console.error('[isUserAdmin] error', e);
     return false;
   }
 }
 
-// Fonction clé : récupérer le nom d'affichage (priorité : Auth → Firestore → email → Admin)
-async function getDisplayName(user, uid) {
-  if (!user && !uid) return 'Admin';
-
+// ────────────────────────────────────────────────
+// Récupération nom d’affichage (très robuste)
+// ────────────────────────────────────────────────
+async function getDisplayName(user = null, uid = null) {
   const targetUid = uid || user?.uid;
   if (!targetUid) return 'Admin';
 
-  // 1. Directement depuis l'objet Auth (le plus rapide)
-  if (user?.displayName && user.displayName.trim()) {
-    console.log('[getDisplayName] trouvé dans Auth:', user.displayName);
+  // 1. Auth → le plus rapide et fiable
+  if (user?.displayName?.trim()) {
     return user.displayName.trim();
   }
 
-  // 2. Depuis Firestore /users/{uid}
+  // 2. Firestore /users/{uid}
   try {
-    console.log('[getDisplayName] lecture /users/' + targetUid);
     const userSnap = await getDoc(doc(db, 'users', targetUid));
-    
     if (userSnap.exists()) {
       const data = userSnap.data();
-      if (data.displayName && data.displayName.trim()) {
-        console.log('[getDisplayName] trouvé dans Firestore:', data.displayName);
+      if (data.displayName?.trim()) {
         return data.displayName.trim();
-      } else {
-        console.log('[getDisplayName] /users existe mais pas de displayName');
       }
-    } else {
-      console.log('[getDisplayName] document /users/' + targetUid + ' n\'existe PAS');
     }
   } catch (err) {
-    console.error('[getDisplayName] erreur lecture Firestore:', err);
+    console.warn('[getDisplayName] Firestore error for', targetUid, err);
   }
 
-  // 3. Fallback : partie avant @ de l'email
+  // 3. Fallback email → prenom.nom
   if (user?.email) {
-    const nameFromEmail = user.email.split('@')[0];
-    console.log('[getDisplayName] fallback email:', nameFromEmail);
-    return nameFromEmail;
+    return user.email.split('@')[0];
   }
 
-  console.log('[getDisplayName] fallback final: Admin');
   return 'Admin';
 }
 
-// Suppression récursive d'une collection (history)
-async function deleteCollection(collectionRef, batchSize = 400) {
-  const snap = await getDocs(collectionRef);
+// ────────────────────────────────────────────────
+// Suppression récursive history
+// ────────────────────────────────────────────────
+async function deleteCollection(colRef, batchSize = 400) {
+  const snap = await getDocs(colRef);
   if (snap.empty) return;
 
   const batch = writeBatch(db);
   let ops = 0;
 
-  snap.forEach(docSnap => {
-    batch.delete(docSnap.ref);
+  snap.forEach(d => {
+    batch.delete(d.ref);
     ops++;
     if (ops >= batchSize) return;
   });
 
-  if (ops > 0) await batch.commit().catch(err => console.error("Batch error:", err));
+  if (ops > 0) await batch.commit().catch(e => console.error('Batch commit error', e));
 
   if (snap.size >= batchSize) {
-    await deleteCollection(collectionRef, batchSize);
+    await deleteCollection(colRef, batchSize);
   }
 }
 
-// Rendu carte ticket (on garde pris en charge par nom quand possible)
+// ────────────────────────────────────────────────
+// Rendu carte ticket
+// ────────────────────────────────────────────────
 function renderItem(d) {
   const t = d.data();
   const id = d.id;
@@ -108,10 +109,10 @@ function renderItem(d) {
 
   let takenInfo = '';
   if (t.takenBy && t.takenAt) {
-    const takenDate = t.takenAt.toDate ? t.takenAt.toDate() : new Date(t.takenAt);
+    const date = t.takenAt.toDate ? t.takenAt.toDate() : new Date(t.takenAt);
     takenInfo = `<div class="text-success small mt-1">
       <i class="bi bi-person-check-fill me-1"></i>
-      Pris en charge par <strong>${t.takenBy}</strong> le ${formatDate(takenDate)}
+      Pris en charge par <strong>${t.takenBy}</strong> le ${formatDate(date)}
     </div>`;
   }
 
@@ -144,6 +145,9 @@ function renderItem(d) {
   </div>`;
 }
 
+// ────────────────────────────────────────────────
+// Rafraîchissement liste
+// ────────────────────────────────────────────────
 function refreshList() {
   const q = (inputSearch.value || '').toLowerCase();
   const fs = filterStatus.value;
@@ -159,24 +163,26 @@ function refreshList() {
   show(elEmpty, filtered.length === 0);
   filtered.forEach(d => elList.insertAdjacentHTML('beforeend', renderItem(d)));
 
-  // Rafraîchissement async des noms (pour les anciens takenBy)
+  // Rafraîchissement async des noms dans les badges "Pris en charge par"
   setTimeout(async () => {
-    const takenElements = document.querySelectorAll('.text-success strong');
-    for (const el of takenElements) {
+    const nameEls = document.querySelectorAll('.text-success strong');
+    for (const el of nameEls) {
       const current = el.textContent.trim();
       if (current === 'Admin' || current.includes('@')) {
-        const name = await getDisplayName(null, current);
+        const name = await getDisplayName(null, null); // fallback global pour l'admin courant
         el.textContent = name;
       }
     }
-  }, 500);
+  }, 800); // léger délai pour que le DOM soit prêt
 }
 
-// Listeners filtres
+// ────────────────────────────────────────────────
+// Listeners
+// ────────────────────────────────────────────────
 filterStatus?.addEventListener('change', refreshList);
 inputSearch?.addEventListener('input', refreshList);
 
-// Changement statut + historique avec nom
+// Changement de statut
 elList.addEventListener('change', async (e) => {
   const sel = e.target.closest('select[data-id]');
   if (!sel) return;
@@ -188,7 +194,7 @@ elList.addEventListener('change', async (e) => {
   if (newStatus === oldStatus) return;
 
   const currentUser = window.__currentUser;
-  const changedBy = await getDisplayName(currentUser, currentUser?.uid);
+  const changedBy = await getDisplayName(currentUser);
 
   try {
     const ticketRef = doc(db, 'tickets', id);
@@ -213,15 +219,14 @@ elList.addEventListener('change', async (e) => {
 
     toast(`Statut → ${newStatus}`);
     sel.setAttribute('data-current', newStatus);
-
   } catch (err) {
-    console.error('[admin] update failed', err);
-    toast('Échec : ' + (err?.code || err?.message || 'Erreur'));
+    console.error('[update status] error', err);
+    toast('Échec mise à jour');
     sel.value = oldStatus;
   }
 });
 
-// Suppression + nettoyage history
+// Suppression
 elList.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-delete]');
   if (!btn) return;
@@ -238,15 +243,15 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
     await deleteDoc(ticketRef);
     toast('Ticket et historique supprimés');
   } catch (e) {
-    console.error('[admin] delete failed', e);
-    toast('Échec suppression : ' + (e?.code || e?.message || 'Erreur'));
+    console.error('[delete ticket] error', e);
+    toast('Échec suppression');
   } finally {
     pendingDeleteId = null;
     modalDelete?.hide();
   }
 });
 
-// Affichage historique
+// Historique
 elList.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-history]');
   if (!btn) return;
@@ -288,12 +293,14 @@ elList.addEventListener('click', async (e) => {
 
     content.innerHTML = html;
   } catch (err) {
-    console.error('[history] load failed', err);
+    console.error('[load history] error', err);
     content.innerHTML = '<div class="alert alert-danger">Erreur chargement historique</div>';
   }
 });
 
-// Init
+// ────────────────────────────────────────────────
+// Initialisation
+// ────────────────────────────────────────────────
 (async () => {
   const user = await requireAuth(true);
   if (!user) return;
@@ -312,7 +319,7 @@ elList.addEventListener('click', async (e) => {
       refreshList();
     },
     err => {
-      console.error('[tickets] snapshot error', err);
+      console.error('[tickets snapshot] error', err);
       toast('Erreur chargement tickets');
       show(elEmpty, true);
     }

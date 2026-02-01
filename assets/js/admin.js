@@ -1,6 +1,5 @@
-// assets/js/admin.js
 // ------------------------------------------------------------
-// Page Administration : liste les tickets, mise à jour de statut,
+// Page Administration : liste les tickets, mise à jour de statut avec historique,
 // suppression avec confirmation. Accès réservé aux admins.
 // ------------------------------------------------------------
 
@@ -9,8 +8,16 @@ import { db } from './firebase-init.js';
 import { requireAuth, badgeForStatus, badgeForPriority, formatDate, toast } from './app.js';
 
 import {
-  collection, query, orderBy, onSnapshot,
-  updateDoc, deleteDoc, doc, getDoc
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  updateDoc,
+  deleteDoc,
+  doc,
+  getDoc,
+  addDoc,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ---------- Eléments ----------
@@ -20,12 +27,14 @@ const filterStatus = document.getElementById('filter-status');
 const inputSearch  = document.getElementById('search');
 
 // ---------- Etat ----------
-let data = [];           // snapshot docs (Firestore)
+let data = []; // snapshot docs (Firestore)
 let pendingDeleteId = null;
 let modalDelete = null;
 
 // ---------- Utils ----------
-function show(el, yes = true){ if (el) el.classList.toggle('d-none', !yes); }
+function show(el, yes = true) {
+  if (el) el.classList.toggle('d-none', !yes);
+}
 
 // Vérifie le rôle admin via /admins/{uid}
 async function isUserAdmin(uid) {
@@ -42,10 +51,11 @@ async function isUserAdmin(uid) {
 function renderItem(d) {
   const t = d.data();
   const id = d.id;
+
   const details =
     `${badgeForStatus(t.status)} ${badgeForPriority(t.priority)} ` +
     `<span class="ms-2 text-muted small">${t.category}${t.type ? ' • ' + t.type : ''}</span>`;
-  
+
   // Information de prise en charge
   let takenInfo = '';
   if (t.takenBy && t.takenAt) {
@@ -55,11 +65,11 @@ function renderItem(d) {
       Pris en charge par <strong>${t.takenBy}</strong> le ${formatDate(takenDate)}
     </div>`;
   }
-  
+
   const meta =
     `Par ${t.email || t.createdBy} • ${formatDate(t.createdAt)} • #${id}`;
 
-  // Bouton suppression seulement si admin (flag posé par app.js)
+  // Bouton suppression seulement si admin
   const deleteBtn = (window.__isAdmin)
     ? `<button type="button" class="btn btn-outline-danger btn-sm"
                title="Supprimer ce ticket" aria-label="Supprimer ce ticket"
@@ -95,6 +105,7 @@ function renderItem(d) {
 function refreshList() {
   const q = (inputSearch.value || '').toLowerCase();
   const fs = filterStatus.value;
+
   const filtered = data.filter(d => {
     const t = d.data();
     const matchStatus = fs ? t.status === fs : true;
@@ -105,6 +116,7 @@ function refreshList() {
 
   elList.innerHTML = '';
   show(elEmpty, filtered.length === 0);
+
   filtered.forEach(d => elList.insertAdjacentHTML('beforeend', renderItem(d)));
 }
 
@@ -112,37 +124,65 @@ function refreshList() {
 filterStatus?.addEventListener('change', refreshList);
 inputSearch?.addEventListener('input', refreshList);
 
-// Délégation : changement de statut & clic suppression
+// Changement de statut + historique
 elList.addEventListener('change', async (e) => {
   const sel = e.target.closest('select[data-id]');
   if (!sel) return;
-  const id = sel.getAttribute('data-id');
+
+  const id        = sel.getAttribute('data-id');
   const newStatus = sel.value;
   const oldStatus = sel.getAttribute('data-current');
-  
+
+  if (newStatus === oldStatus) return;
+
+  const user = window.__currentUser;
+  const changedBy = user?.displayName || user?.email || 'Système';
+
   try {
+    const ticketRef = doc(db, 'tickets', id);
+
+    // Préparer l'entrée d'historique
+    const historyEntry = {
+      field:     'status',
+      oldValue:  oldStatus,
+      newValue:  newStatus,
+      changedBy: changedBy,
+      changedAt: serverTimestamp(),
+      // comment: ""   ← à décommenter si tu veux ajouter un commentaire plus tard
+    };
+
+    // Mise à jour du ticket principal
     const updateData = { status: newStatus };
-    
-    // Si passage de "Ouvert" à "En cours", enregistrer la prise en charge
+
+    // Logique existante de prise en charge
     if (oldStatus === 'Ouvert' && newStatus === 'En cours') {
-      const user = window.__currentUser;
-      updateData.takenBy = user?.displayName || user?.email || 'Admin';
-      updateData.takenAt = new Date();
+      updateData.takenBy = changedBy;
+      updateData.takenAt = serverTimestamp();
     }
-    
-    await updateDoc(doc(db, 'tickets', id), updateData);
-    toast('Statut mis à jour');
+
+    await updateDoc(ticketRef, updateData);
+
+    // Ajout de l'historique
+    await addDoc(
+      collection(ticketRef, 'history'),
+      historyEntry
+    );
+
+    toast(`Statut mis à jour : ${newStatus}`);
     sel.setAttribute('data-current', newStatus);
+
   } catch (err) {
-    console.error('[admin] update status', err);
-    toast('MàJ refusée : ' + (err?.code || err?.message || err));
-    sel.value = sel.getAttribute('data-current');
+    console.error('[admin] update + history failed', err);
+    toast('Échec de la mise à jour : ' + (err?.code || err?.message || 'Erreur inconnue'));
+    sel.value = oldStatus; // rollback visuel
   }
 });
 
+// Suppression
 elList.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-delete]');
   if (!btn) return;
+
   pendingDeleteId = btn.getAttribute('data-delete');
   if (!modalDelete) modalDelete = new bootstrap.Modal(document.getElementById('confirmDelete'));
   modalDelete.show();
@@ -150,6 +190,7 @@ elList.addEventListener('click', (e) => {
 
 document.getElementById('btn-confirm-delete')?.addEventListener('click', async () => {
   if (!pendingDeleteId) return;
+
   try {
     await deleteDoc(doc(db, 'tickets', pendingDeleteId));
     toast('Ticket supprimé');
@@ -162,7 +203,7 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
   }
 });
 
-// ---------- Bootstrap de la page ----------
+// ---------- Initialisation ----------
 (async () => {
   const user = await requireAuth(true);
   if (!user) return;
@@ -170,22 +211,22 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
   const admin = await isUserAdmin(user.uid);
   if (!admin) {
     toast('Accès admin requis');
-    // Option : rediriger vers la page "Mes tickets"
     setTimeout(() => window.location.href = 'tickets.html', 800);
     return;
   }
 
-  // Requête temps réel (liste complète, admin uniquement)
+  // Requête temps réel – tous les tickets
   const qAll = query(collection(db, 'tickets'), orderBy('createdAt', 'desc'));
+
   onSnapshot(qAll, (snap) => {
     data = snap.docs;
     refreshList();
   }, (err) => {
     console.error('[admin] onSnapshot error:', err);
     if (err.code === 'permission-denied') {
-      toast('Permission refusée (règles Firestore)');
+      toast('Permission refusée (vérifiez les règles Firestore)');
     } else if (err.code === 'failed-precondition') {
-      toast('Index manquant pour cette requête (voir console Firebase)');
+      toast('Index manquant pour cette requête (console Firebase)');
     } else {
       toast('Erreur : ' + (err.message || err));
     }

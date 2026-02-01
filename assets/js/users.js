@@ -1,11 +1,11 @@
 // ============================================================
-// Page Utilisateurs & Rôles – Création directe email + password
-// Version corrigée pour éviter "Missing or insufficient permissions"
+// users.js — Version corrigée (2026-02)
+// Création utilisateur sans perdre la session admin
 // ============================================================
 
 import './app.js';
 import { db } from './firebase-init.js';
-import { requireAuth, toast, esc } from './app.js';
+import { requireAuth, toast } from './app.js';
 
 import {
   collection,
@@ -30,51 +30,52 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // ────────────────────────────────────────────────
-// Références DOM
+// DOM
 // ────────────────────────────────────────────────
-const elBody         = document.getElementById('users-tbody');
-const elSearch       = document.getElementById('search');
-const btnPrev        = document.getElementById('btn-prev');
-const btnNext        = document.getElementById('btn-next');
-const pageInfo       = document.getElementById('page-info');
-const btnOpenCreate  = document.getElementById('btn-open-create');
-const formCreate     = document.getElementById('form-create-user');
-const elCuEmail      = document.getElementById('cu-email');
-const elCuName       = document.getElementById('cu-displayName');
-const elCuPassword   = document.getElementById('cu-password');
-const elCuConfirm    = document.getElementById('cu-password-confirm');
-const elCuAdmin      = document.getElementById('cu-makeAdmin');
-const elCuCanCreate  = document.getElementById('cu-canCreate');
-const elCuResult     = document.getElementById('cu-result');
+const tbody           = document.getElementById('users-tbody');
+const searchInput     = document.getElementById('search');
+const btnPrev         = document.getElementById('btn-prev');
+const btnNext         = document.getElementById('btn-next');
+const pageInfo        = document.getElementById('page-info');
+const btnOpenCreate   = document.getElementById('btn-open-create');
+const formCreate      = document.getElementById('form-create-user');
+const cuEmail         = document.getElementById('cu-email');
+const cuDisplayName   = document.getElementById('cu-displayName');
+const cuPassword      = document.getElementById('cu-password');
+const cuConfirm       = document.getElementById('cu-password-confirm');
+const cuMakeAdmin     = document.getElementById('cu-makeAdmin');
+const cuCanCreate     = document.getElementById('cu-canCreate');
+const cuResult        = document.getElementById('cu-result');
 
 // ────────────────────────────────────────────────
-// Pagination & état
+// État pagination
 // ────────────────────────────────────────────────
 const PAGE_SIZE = 20;
-let lastDoc = null;
-let firstDoc = null;
-let history = [];
-let adminsSet = new Set();
+let lastVisible = null;
+let firstVisible = null;
+let historyStack = [];          // pour gérer prev
+let adminsCache = new Set();
 
 // ────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────
-function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
-  );
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
 }
 
-function row(user, isAdmin) {
-  const name = esc(user.displayName || '—');
-  const email = esc(user.email || '—');
-  const canCreate = user.canCreateTickets !== false;
-  const uidText = esc(user.uid || '');
+function renderRow(userData, isAdmin) {
+  const name = escapeHtml(userData.displayName || '—');
+  const email = escapeHtml(userData.email || '—');
+  const canCreate = userData.canCreateTickets !== false;
+  const uid = escapeHtml(userData.uid || '');
+
   return `
     <tr>
       <td>
         <div class="fw-semibold">${name}</div>
-        <div class="small text-muted">${uidText}</div>
+        <div class="small text-muted">${uid}</div>
       </td>
       <td>${email}</td>
       <td class="text-center">
@@ -88,238 +89,255 @@ function row(user, isAdmin) {
         </span>
       </td>
       <td class="text-end">
-        <button class="btn btn-sm ${isAdmin ? 'btn-outline-danger' : 'btn-outline-primary'}"
-                data-action="toggle-admin" data-uid="${esc(user.uid)}">
+        <button class="btn btn-sm ${isAdmin ? 'btn-outline-danger' : 'btn-outline-primary'} btn-toggle-admin"
+                data-uid="${uid}">
           ${isAdmin ? 'Retirer admin' : 'Promouvoir admin'}
         </button>
       </td>
     </tr>`;
 }
 
-async function loadAdmins() {
-  adminsSet = new Set();
+// ────────────────────────────────────────────────
+// Charger la liste des admins (cache)
+// ────────────────────────────────────────────────
+async function refreshAdminsCache() {
+  adminsCache.clear();
   const snap = await getDocs(collection(db, 'admins'));
-  snap.forEach(d => adminsSet.add(d.id));
+  snap.forEach(d => adminsCache.add(d.id));
 }
 
-async function loadPage(direction = 'first') {
-  await loadAdmins();
-  const base = query(collection(db, 'users'), orderBy('email'));
-  let q;
+// ────────────────────────────────────────────────
+// Chargement paginé
+// ────────────────────────────────────────────────
+async function loadUsers(direction = 'first') {
+  await refreshAdminsCache();
 
-  if (direction === 'first') {
-    q = query(base, limit(PAGE_SIZE));
-  } else if (direction === 'next' && lastDoc) {
-    q = query(base, startAfter(lastDoc), limit(PAGE_SIZE));
-  } else if (direction === 'prev' && history.length > 1 && firstDoc) {
-    q = query(base, endBefore(firstDoc), limitToLast(PAGE_SIZE));
-  } else {
-    return;
+  let q = query(
+    collection(db, 'users'),
+    orderBy('email'),
+    limit(PAGE_SIZE)
+  );
+
+  if (direction === 'next' && lastVisible) {
+    q = query(
+      collection(db, 'users'),
+      orderBy('email'),
+      startAfter(lastVisible),
+      limit(PAGE_SIZE)
+    );
+  } else if (direction === 'prev' && firstVisible && historyStack.length > 1) {
+    q = query(
+      collection(db, 'users'),
+      orderBy('email'),
+      endBefore(firstVisible),
+      limitToLast(PAGE_SIZE)
+    );
   }
 
   const snap = await getDocs(q);
-  elBody.innerHTML = '';
+
+  tbody.innerHTML = '';
 
   if (snap.empty) {
     pageInfo.textContent = 'Aucun utilisateur';
     btnNext.disabled = true;
-    btnPrev.disabled = history.length <= 1;
+    btnPrev.disabled = historyStack.length <= 1;
     return;
   }
 
   const rows = [];
-  snap.forEach(d => {
-    const u = d.data();
-    u.uid = d.id;
-    rows.push(row(u, adminsSet.has(d.id)));
+  snap.forEach(docSnap => {
+    const data = docSnap.data();
+    data.uid = docSnap.id;
+    rows.push(renderRow(data, adminsCache.has(docSnap.id)));
   });
-  elBody.innerHTML = rows.join('');
 
-  firstDoc = snap.docs[0];
-  lastDoc = snap.docs[snap.docs.length - 1];
+  tbody.innerHTML = rows.join('');
 
-  if (direction === 'first') history = [firstDoc];
-  else if (direction === 'next') history.push(firstDoc);
-  else if (direction === 'prev') {
-    history.pop();
-    history[history.length - 1] = firstDoc;
+  firstVisible = snap.docs[0];
+  lastVisible  = snap.docs[snap.docs.length - 1];
+
+  if (direction === 'first') {
+    historyStack = [firstVisible];
+  } else if (direction === 'next') {
+    historyStack.push(firstVisible);
+  } else if (direction === 'prev') {
+    historyStack.pop();
+    firstVisible = historyStack[historyStack.length - 1];
   }
 
-  pageInfo.textContent = `Affichés : ${snap.size}`;
-  btnPrev.disabled = history.length <= 1;
+  pageInfo.textContent = `Page ${historyStack.length} — ${snap.size} utilisateur${snap.size > 1 ? 's' : ''}`;
+  btnPrev.disabled = historyStack.length <= 1;
   btnNext.disabled = snap.size < PAGE_SIZE;
 }
 
 // ────────────────────────────────────────────────
-// Toggle rôle admin
+// Toggle admin
 // ────────────────────────────────────────────────
-document.addEventListener('click', async (e) => {
-  const btn = e.target.closest('button[data-action="toggle-admin"]');
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('.btn-toggle-admin');
   if (!btn) return;
 
-  const uid = btn.getAttribute('data-uid');
-  const isAdmin = adminsSet.has(uid);
+  const uid = btn.dataset.uid;
+  const wasAdmin = adminsCache.has(uid);
+
+  btn.disabled = true;
 
   try {
-    btn.disabled = true;
-    if (isAdmin) {
+    if (wasAdmin) {
       await deleteDoc(doc(db, 'admins', uid));
-      toast('Rôle administrateur retiré');
+      toast('Rôle admin retiré');
     } else {
       await setDoc(doc(db, 'admins', uid), {});
-      toast('Utilisateur promu administrateur');
+      toast('Promu admin');
     }
-    await loadPage('first');
+    await loadUsers('first');
   } catch (err) {
-    console.error('[toggle-admin]', err);
+    console.error('Toggle admin error', err);
     toast('Échec modification rôle');
   } finally {
     btn.disabled = false;
   }
 });
 
-btnNext?.addEventListener('click', () => loadPage('next'));
-btnPrev?.addEventListener('click', () => loadPage('prev'));
+// ────────────────────────────────────────────────
+// Pagination & recherche locale
+// ────────────────────────────────────────────────
+btnNext?.addEventListener('click', () => loadUsers('next'));
+btnPrev?.addEventListener('click', () => loadUsers('prev'));
 
-elSearch?.addEventListener('input', () => {
-  const term = elSearch.value.toLowerCase();
-  [...elBody.querySelectorAll('tr')].forEach(tr => {
-    tr.classList.toggle('d-none', !tr.textContent.toLowerCase().includes(term));
+searchInput?.addEventListener('input', () => {
+  const term = searchInput.value.toLowerCase().trim();
+  document.querySelectorAll('#users-tbody tr').forEach(row => {
+    row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
   });
 });
 
 // ────────────────────────────────────────────────
-// Création utilisateur (corrigée)
+// Création utilisateur (sans perdre session admin)
 // ────────────────────────────────────────────────
-let modalCreate;
-function initModal() {
-  if (!modalCreate) {
-    modalCreate = new bootstrap.Modal(document.getElementById('modal-create-user'));
-  }
-  return modalCreate;
-}
-
+let createModal;
 btnOpenCreate?.addEventListener('click', () => {
-  initModal();
-  elCuEmail.value = '';
-  elCuName.value = '';
-  elCuPassword.value = '';
-  elCuConfirm.value = '';
-  elCuAdmin.checked = false;
-  elCuCanCreate.checked = true;
-  elCuResult.classList.add('d-none');
-  elCuResult.textContent = '';
-  modalCreate.show();
+  if (!createModal) {
+    createModal = new bootstrap.Modal(document.getElementById('modal-create-user'));
+  }
+
+  cuEmail.value = '';
+  cuDisplayName.value = '';
+  cuPassword.value = '';
+  cuConfirm.value = '';
+  cuMakeAdmin.checked = false;
+  cuCanCreate.checked = true;
+  cuResult.classList.add('d-none');
+  cuResult.textContent = '';
+
+  createModal.show();
 });
 
-formCreate?.addEventListener('submit', async (e) => {
+formCreate?.addEventListener('submit', async e => {
   e.preventDefault();
 
-  const email          = (elCuEmail?.value     || '').trim();
-  const displayName    = (elCuName?.value      || '').trim();
-  const password       = elCuPassword?.value   || '';
-  const passwordConfirm = elCuConfirm?.value   || '';
-  const makeAdmin      = elCuAdmin?.checked    ?? false;
-  const canCreateTickets = elCuCanCreate?.checked ?? true;
+  const email       = cuEmail.value.trim();
+  const displayName = cuDisplayName.value.trim();
+  const pw          = cuPassword.value;
+  const pwConfirm   = cuConfirm.value;
+  const isAdmin     = cuMakeAdmin.checked;
+  const canCreate   = cuCanCreate.checked;
 
-  if (!email || !displayName || !password) {
-    toast('Email, nom et mot de passe obligatoires');
+  if (!email || !displayName || !pw || pw !== pwConfirm) {
+    toast('Vérifiez les champs obligatoires et la confirmation du mot de passe');
     return;
   }
-  if (password !== passwordConfirm) {
-    toast('Les mots de passe ne correspondent pas');
-    return;
-  }
-  if (password.length < 8) {
+  if (pw.length < 8) {
     toast('Le mot de passe doit contenir au moins 8 caractères');
     return;
   }
 
-  const btn = document.getElementById('cu-submit');
-  if (btn) btn.disabled = true;
+  const submitBtn = document.getElementById('cu-submit');
+  submitBtn.disabled = true;
 
   try {
-    const currentAdmin = await requireAuth(true);
-    if (!currentAdmin) throw new Error('Session admin perdue');
+    // 1. Sauvegarde l'admin actuel AVANT de créer le compte
+    const adminUser = await requireAuth(true);
+    if (!adminUser) throw new Error('Session perdue');
 
-    // 1. Créer un placeholder avec UID temporaire (sous droits admin)
-    const placeholderRef = doc(collection(db, 'users'));
-    const tempUid = placeholderRef.id;
+    // 2. Créer le document utilisateur AVANT création Auth (droits admin)
+    const userRef = doc(collection(db, 'users'));
+    const tempId = userRef.id;
 
-    await setDoc(placeholderRef, {
+    await setDoc(userRef, {
       email,
       displayName,
-      canCreateTickets,
+      canCreateTickets: canCreate,
       createdAt: serverTimestamp(),
-      createdBy: currentAdmin.uid,
-      status: 'pending_auth',
-      tempUid // pour traçabilité si besoin
+      createdBy: adminUser.uid,
+      status: 'pending_auth'
     });
 
-    // 2. Créer le compte Auth (l'utilisateur courant change ici !)
+    // 3. Créer le compte Auth → l'utilisateur courant change ici
     const auth = getAuth();
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const newUser = userCredential.user;
+    const credential = await createUserWithEmailAndPassword(auth, email, pw);
+    const newUser = credential.user;
 
-    // 3. Mettre à jour displayName dans Firebase Auth
+    // 4. Mettre à jour displayName Auth
     await updateProfile(newUser, { displayName });
 
-    // 4. Supprimer le placeholder et créer le vrai document avec le bon UID
-    await deleteDoc(doc(db, 'users', tempUid));
+    // 5. Remplacer le document par le vrai UID
+    await deleteDoc(doc(db, 'users', tempId));
 
     await setDoc(doc(db, 'users', newUser.uid), {
       uid: newUser.uid,
       email: newUser.email,
       displayName,
-      canCreateTickets,
+      canCreateTickets: canCreate,
       createdAt: serverTimestamp(),
-      createdBy: currentAdmin.uid   // on garde l'UID de l'admin créateur
+      createdBy: adminUser.uid
     });
 
-    // 5. Promouvoir admin si demandé
-    if (makeAdmin) {
-      await setDoc(doc(db, 'admins', newUser.uid), {}, { merge: true });
+    // 6. Ajouter rôle admin si coché
+    if (isAdmin) {
+      await setDoc(doc(db, 'admins', newUser.uid), {});
     }
 
     toast('Utilisateur créé avec succès');
-    if (elCuResult) {
-      elCuResult.classList.remove('d-none');
-      elCuResult.textContent = `Compte créé : ${esc(email)} (${esc(displayName)})`;
-    }
+    cuResult.textContent = `Compte créé : ${escapeHtml(email)} (${escapeHtml(displayName)})`;
+    cuResult.classList.remove('d-none');
 
-    await loadPage('first');
-    modalCreate.hide();
+    await loadUsers('first');
+    createModal.hide();
 
   } catch (err) {
-    console.error('[create user]', err);
-    let msg = 'Erreur lors de la création';
-    if (err.code === 'auth/email-already-in-use')    msg = 'Cet email est déjà utilisé';
-    if (err.code === 'auth/weak-password')           msg = 'Mot de passe trop faible';
-    if (err.code === 'permission-denied')            msg = 'Permissions insuffisantes (vérifiez les règles)';
+    console.error('Création utilisateur échouée', err);
+    let msg = 'Erreur création';
+    switch (err.code) {
+      case 'auth/email-already-in-use': msg = 'Cet email existe déjà'; break;
+      case 'auth/weak-password':        msg = 'Mot de passe trop faible'; break;
+      case 'permission-denied':         msg = 'Permissions insuffisantes (règles Firestore)'; break;
+    }
     toast(msg);
   } finally {
-    if (btn) btn.disabled = false;
+    submitBtn.disabled = false;
   }
 });
 
 // ────────────────────────────────────────────────
-// Initialisation
+// Démarrage
 // ────────────────────────────────────────────────
 (async () => {
-  const user = await requireAuth(true);
-  if (!user) return;
-
   try {
-    const adminSnap = await getDoc(doc(db, 'admins', user.uid));
-    if (!adminSnap.exists()) {
+    const user = await requireAuth(true);
+    if (!user) return;
+
+    const adminDoc = await getDoc(doc(db, 'admins', user.uid));
+    if (!adminDoc.exists()) {
       toast('Accès réservé aux administrateurs');
-      setTimeout(() => window.location.href = 'tickets.html', 800);
+      setTimeout(() => location.href = 'tickets.html', 1200);
       return;
     }
 
-    await loadPage('first');
+    await loadUsers('first');
   } catch (err) {
-    console.error('[users init]', err);
-    toast('Erreur chargement liste utilisateurs');
+    console.error('Initialisation users échouée', err);
+    toast('Impossible de charger la page (voir console)');
   }
 })();

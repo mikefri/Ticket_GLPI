@@ -1,10 +1,4 @@
-// ============================================================
-// Page Utilisateurs & Rôles
-// - Liste + pagination Firestore
-// - Promotion / Retrait admin
-// - Création d’utilisateur par invitation e-mail (Email Link, sans Cloud Functions)
-// - Accès réservé aux admins (vérification directe Firestore)
-// ============================================================
+// Page Utilisateurs & Rôles – Création directe email/password
 
 import './app.js';
 import { db } from './firebase-init.js';
@@ -12,68 +6,44 @@ import { requireAuth, toast } from './app.js';
 
 import {
   collection, query, orderBy, limit, limitToLast, startAfter, endBefore,
-  getDocs, getDoc, setDoc, deleteDoc, doc, addDoc, serverTimestamp
+  getDocs, getDoc, setDoc, deleteDoc, doc, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 import {
-  getAuth, sendSignInLinkToEmail
+  getAuth, createUserWithEmailAndPassword, updateProfile
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// ------------------------------------
-// Paramètres du lien magique (Email Link)
-// - url : page qui terminera la connexion via signInWithEmailLink()
-// - handleCodeInApp: true est requis côté Web
-// ------------------------------------
-const actionCodeSettings = {
-  url: `${location.origin}/Ticket_GLPI/login.html`, // adapte si tu préfères index.html
-  handleCodeInApp: true
-};
+// DOM
+const elBody         = document.getElementById('users-tbody');
+const elSearch       = document.getElementById('search');
+const btnPrev        = document.getElementById('btn-prev');
+const btnNext        = document.getElementById('btn-next');
+const pageInfo       = document.getElementById('page-info');
+const btnOpenCreate  = document.getElementById('btn-open-create');
+const formCreate     = document.getElementById('form-create-user');
+const elCuEmail      = document.getElementById('cu-email');
+const elCuName       = document.getElementById('cu-displayName');
+const elCuPassword   = document.getElementById('cu-password');
+const elCuConfirm    = document.getElementById('cu-password-confirm');
+const elCuAdmin      = document.getElementById('cu-makeAdmin');
+const elCuCanCreate  = document.getElementById('cu-canCreate');
+const elCuResult     = document.getElementById('cu-result');
 
-// ------------------------------------
-// Références DOM
-// ------------------------------------
-const elBody   = document.getElementById('users-tbody');
-const elSearch = document.getElementById('search');
-const btnPrev  = document.getElementById('btn-prev');
-const btnNext  = document.getElementById('btn-next');
-const pageInfo = document.getElementById('page-info');
-
-// UI Création utilisateur (Invitation)
-const btnOpenCreate = document.getElementById('btn-open-create');
-const formCreate    = document.getElementById('form-create-user');
-const elCuEmail     = document.getElementById('cu-email');
-const elCuName      = document.getElementById('cu-displayName');
-const elCuAdmin     = document.getElementById('cu-makeAdmin');   // Conservé UI (info), pas d’effet direct sans serveur
-const elCuCanCreate = document.getElementById('cu-canCreate');
-const elCuResult    = document.getElementById('cu-result');
-
-// ------------------------------------
-// État pagination + admins
-// ------------------------------------
 const PAGE_SIZE = 20;
-let lastDoc = null;     // dernier doc de la page courante (pour "next")
-let firstDoc = null;    // premier doc de la page courante (pour "prev")
-let history = [];       // pile des firstDoc des pages visitées
+let lastDoc = null;
+let firstDoc = null;
+let history = [];
 let adminsSet = new Set();
 
-// ------------------------------------
-// Helper : échappement HTML (affichage uniquement)
-// ------------------------------------
 function esc(s) {
-  return String(s ?? '').replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])
-  );
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// ------------------------------------
-// Rendu d’une ligne
-// ------------------------------------
-function row(user, isAdmin){
-  const name  = esc(user.displayName) || '—';
+function row(user, isAdmin) {
+  const name = esc(user.displayName) || '—';
   const email = esc(user.email) || '—';
   const canCreate = user.canCreateTickets !== false;
   const uidText = esc(user.uid || '');
-
   return `
     <tr>
       <td>
@@ -100,24 +70,14 @@ function row(user, isAdmin){
     </tr>`;
 }
 
-// ------------------------------------
-// Charge la liste des admins (Set d’UID)
-// ------------------------------------
 async function loadAdmins() {
   adminsSet = new Set();
   const snap = await getDocs(collection(db, 'admins'));
   snap.forEach(d => adminsSet.add(d.id));
 }
 
-// ------------------------------------
-// Pagination fiable :
-//  - first : limit(PAGE_SIZE)
-//  - next  : startAfter(lastDoc) + limit(PAGE_SIZE)
-//  - prev  : endBefore(firstDoc) + limitToLast(PAGE_SIZE)
-// ------------------------------------
-async function loadPage(direction = 'first'){
+async function loadPage(direction = 'first') {
   await loadAdmins();
-
   const base = query(collection(db, 'users'), orderBy('email'));
   let q;
 
@@ -127,13 +87,11 @@ async function loadPage(direction = 'first'){
     q = query(base, startAfter(lastDoc), limit(PAGE_SIZE));
   } else if (direction === 'prev' && history.length > 1 && firstDoc) {
     q = query(base, endBefore(firstDoc), limitToLast(PAGE_SIZE));
-  } else {
-    return;
-  }
+  } else return;
 
   const snap = await getDocs(q);
-
   elBody.innerHTML = '';
+
   if (snap.empty) {
     pageInfo.textContent = 'Aucun utilisateur';
     btnNext.disabled = true;
@@ -150,13 +108,11 @@ async function loadPage(direction = 'first'){
   elBody.innerHTML = rows.join('');
 
   firstDoc = snap.docs[0];
-  lastDoc  = snap.docs[snap.docs.length - 1];
+  lastDoc = snap.docs[snap.docs.length - 1];
 
-  if (direction === 'first') {
-    history = [firstDoc];
-  } else if (direction === 'next') {
-    history.push(firstDoc);
-  } else if (direction === 'prev') {
+  if (direction === 'first') history = [firstDoc];
+  else if (direction === 'next') history.push(firstDoc);
+  else if (direction === 'prev') {
     history.pop();
     history[history.length - 1] = firstDoc;
   }
@@ -166,13 +122,10 @@ async function loadPage(direction = 'first'){
   btnNext.disabled = snap.size < PAGE_SIZE;
 }
 
-// ------------------------------------
-// Toggle Admin (promouvoir / retirer)
-// ------------------------------------
+// Toggle admin
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-action="toggle-admin"]');
   if (!btn) return;
-
   const uid = btn.getAttribute('data-uid');
   const isAdmin = adminsSet.has(uid);
 
@@ -180,156 +133,123 @@ document.addEventListener('click', async (e) => {
     btn.disabled = true;
     if (isAdmin) {
       await deleteDoc(doc(db, 'admins', uid));
-      toast('Rôle administrateur retiré');
+      toast('Rôle admin retiré');
     } else {
       await setDoc(doc(db, 'admins', uid), {});
-      toast('Utilisateur promu administrateur');
+      toast('Promu administrateur');
     }
     await loadPage('first');
   } catch (err) {
-    console.error('[users] toggle admin', err);
-    toast('Action refusée (vérifier les règles / droits)');
+    console.error('[users] toggle admin error', err);
+    toast('Échec action');
   } finally {
     btn.disabled = false;
   }
 });
 
-// ------------------------------------
-// Boutons pagination
-// ------------------------------------
 btnNext?.addEventListener('click', () => loadPage('next'));
 btnPrev?.addEventListener('click', () => loadPage('prev'));
 
-// ------------------------------------
-// Filtre client
-// ------------------------------------
-elSearch?.addEventListener('input', async () => {
-  const q = (elSearch.value || '').toLowerCase();
+elSearch?.addEventListener('input', () => {
+  const q = elSearch.value.toLowerCase();
   [...elBody.querySelectorAll('tr')].forEach(tr => {
-    const txt = tr.textContent.toLowerCase();
-    tr.classList.toggle('d-none', !txt.includes(q));
+    tr.classList.toggle('d-none', !tr.textContent.toLowerCase().includes(q));
   });
 });
 
-// ============================================================
-// Invitation par e-mail (Email Link) — sans Cloud Functions
-// - Nécessite le bouton + modal dans users.html
-// - L’utilisateur apparaitra après sa première connexion via le lien
-// - (Optionnel) journalisation dans la collection 'invites'
-// ============================================================
+// Modal création
 let modalCreate;
-
-function initCreateModal() {
-  // bootstrap.bundle.min.js doit être chargé
-  if (!window.bootstrap?.Modal) {
-    console.warn('[users] Bootstrap Modal indisponible (bundle manquant ?)');
-    toast('Impossible d’ouvrir la fenêtre (Bootstrap non chargé).');
-    return false;
-  }
-  if (!modalCreate) {
-    modalCreate = new bootstrap.Modal(document.getElementById('modal-create-user'));
-  }
-  return true;
+function initModal() {
+  if (!modalCreate) modalCreate = new bootstrap.Modal(document.getElementById('modal-create-user'));
+  return modalCreate;
 }
 
-// Ouvrir le modal
-btnOpenCreate?.addEventListener('click', (e) => {
-  e.preventDefault();
-  if (!initCreateModal()) return;
-
-  // reset form
-  if (elCuEmail) elCuEmail.value = '';
-  if (elCuName) elCuName.value = '';
-  if (elCuAdmin) elCuAdmin.checked = false;      // indicatif (pas d’effet auto sans serveur)
-  if (elCuCanCreate) elCuCanCreate.checked = true;
-  if (elCuResult) {
-    elCuResult.classList.add('d-none');
-    elCuResult.textContent = '';
-  }
+btnOpenCreate?.addEventListener('click', () => {
+  initModal();
+  elCuEmail.value = '';
+  elCuName.value = '';
+  elCuPassword.value = '';
+  elCuConfirm.value = '';
+  elCuAdmin.checked = false;
+  elCuCanCreate.checked = true;
+  elCuResult.classList.add('d-none');
   modalCreate.show();
 });
 
-// Soumission du formulaire (envoi du lien magique)
 formCreate?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!initCreateModal()) return;
 
-  const email = (elCuEmail?.value || '').trim();
-  const displayName = (elCuName?.value || '').trim();
-  const makeAdmin = !!elCuAdmin?.checked;            // on peut le journaliser, mais la promo se fera manuellement ensuite
-  const canCreateTickets = !!elCuCanCreate?.checked;
+  const email = elCuEmail.value.trim();
+  const displayName = elCuName.value.trim();
+  const password = elCuPassword.value;
+  const confirm = elCuConfirm.value;
+  const makeAdmin = elCuAdmin.checked;
+  const canCreate = elCuCanCreate.checked;
 
-  if (!email) { toast('Email requis'); return; }
+  if (!email || !displayName || !password) {
+    toast('Champs obligatoires manquants');
+    return;
+  }
+  if (password !== confirm) {
+    toast('Mots de passe différents');
+    return;
+  }
+  if (password.length < 8) {
+    toast('Mot de passe ≥ 8 caractères');
+    return;
+  }
 
   const btn = document.getElementById('cu-submit');
-  if (btn) btn.disabled = true;
+  btn.disabled = true;
 
   try {
-    // (Optionnel) Journalise l’invitation pour suivi interne
-    await addDoc(collection(db, 'invites'), {
-      email,
+    const auth = getAuth();
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const newUser = cred.user;
+
+    await updateProfile(newUser, { displayName });
+
+    await setDoc(doc(db, 'users', newUser.uid), {
+      uid: newUser.uid,
+      email: newUser.email,
       displayName,
-      canCreateTickets,
-      makeAdmin,               // note: la promotion admin devra être faite via le bouton de la liste
-      createdBy: (await requireAuth())?.uid || null,
-      createdAt: serverTimestamp()
+      canCreateTickets: canCreate,
+      createdAt: serverTimestamp(),
+      createdBy: (await requireAuth())?.uid || null
     });
 
-    // Envoi du lien de connexion par e-mail (passwordless)
-    const auth = getAuth();
-    await sendSignInLinkToEmail(auth, email, actionCodeSettings);
-
-    // Si l’utilisateur termine sur le même device, on stocke l’email pour la complétion
-    window.localStorage.setItem('emailForSignIn', email);
-
-    // Feedback UI
-    if (elCuResult) {
-      elCuResult.classList.remove('d-none');
-      elCuResult.innerHTML = `
-        <div>Invitation envoyée à <strong>${esc(email)}</strong>.</div>
-        <div class="mt-2 small text-muted">
-          L’utilisateur cliquera le lien reçu par e‑mail pour se connecter.
-          Son profil apparaîtra ensuite dans la liste.
-        </div>`;
+    if (makeAdmin) {
+      await setDoc(doc(db, 'admins', newUser.uid), {});
     }
-    toast('Invitation envoyée');
 
-    // Ici, on NE recharge PAS la liste : l’utilisateur apparaîtra après sa première connexion
+    toast(makeAdmin ? 'Utilisateur créé + admin' : 'Utilisateur créé');
+    elCuResult.innerHTML = `Compte créé : ${esc(email)} (${displayName})`;
+    elCuResult.classList.remove('d-none');
+
+    await loadPage('first');
+    modalCreate.hide();
   } catch (err) {
-    console.error('[users] invite error:', err);
-    const msg = err?.message || 'Envoi impossible (vérifier domaine autorisé / méthode activée)';
+    console.error('[createUser]', err);
+    let msg = 'Erreur création';
+    if (err.code === 'auth/email-already-in-use') msg = 'Email déjà utilisé';
+    if (err.code === 'auth/weak-password') msg = 'Mot de passe trop faible';
     toast(msg);
   } finally {
-    if (btn) btn.disabled = false;
+    btn.disabled = false;
   }
 });
 
-// ------------------------------------
-// Démarrage : Auth + contrôle Admin + chargement page 1
-// ------------------------------------
+// Init
 (async () => {
   const user = await requireAuth(true);
   if (!user) return;
 
-  // Vérifie l'accès admin DIRECTEMENT sur Firestore pour éviter toute course avec app.js
-  try {
-    const adminSnap = await getDoc(doc(db, 'admins', user.uid));
-    if (!adminSnap.exists()) {
-      toast('Accès admin requis');
-      setTimeout(() => window.location.href = 'tickets.html', 800);
-      return;
-    }
-  } catch (e) {
-    console.error('[users] admin check error:', e);
-    toast('Impossible de vérifier les droits (règles Firestore ?)');
-    setTimeout(() => window.location.href = 'tickets.html', 1200);
+  const adminSnap = await getDoc(doc(db, 'admins', user.uid));
+  if (!adminSnap.exists()) {
+    toast('Accès réservé aux admins');
+    setTimeout(() => location.href = 'tickets.html', 800);
     return;
   }
 
-  try {
-    await loadPage('first');
-  } catch (e) {
-    console.error('[users] loadPage init error:', e);
-    toast('Erreur de chargement de la liste (voir console)');
-  }
+  await loadPage('first');
 })();

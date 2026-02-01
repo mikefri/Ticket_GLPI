@@ -1,4 +1,4 @@
-// Page Administration – avec historique + nom réel de l'admin
+// Page Administration – affiche le NOM au lieu de l'email
 
 import './app.js';
 import { db } from './firebase-init.js';
@@ -34,15 +34,36 @@ async function isUserAdmin(uid) {
   }
 }
 
-// Suppression récursive d'une sous-collection (history)
+// Helper : obtenir le nom d'un utilisateur (priorité : displayName > /users > email)
+async function getUserDisplayName(uid, fallbackEmail = '') {
+  if (!uid) return 'Admin';
+
+  try {
+    const userSnap = await getDoc(doc(db, 'users', uid));
+    if (userSnap.exists() && userSnap.data().displayName) {
+      return userSnap.data().displayName;
+    }
+  } catch (e) {
+    console.warn('[getUserDisplayName] lecture /users échouée', e);
+  }
+
+  // Fallback email → prenom.nom
+  if (fallbackEmail) {
+    return fallbackEmail.split('@')[0];
+  }
+
+  return 'Admin';
+}
+
+// Suppression récursive history
 async function deleteCollection(collectionRef, batchSize = 400) {
-  const querySnapshot = await getDocs(collectionRef);
-  if (querySnapshot.empty) return;
+  const snap = await getDocs(collectionRef);
+  if (snap.empty) return;
 
   const batch = writeBatch(db);
   let ops = 0;
 
-  querySnapshot.forEach((docSnap) => {
+  snap.forEach(docSnap => {
     batch.delete(docSnap.ref);
     ops++;
     if (ops >= batchSize) return;
@@ -50,7 +71,7 @@ async function deleteCollection(collectionRef, batchSize = 400) {
 
   if (ops > 0) await batch.commit().catch(err => console.error("Batch error:", err));
 
-  if (querySnapshot.size >= batchSize) {
+  if (snap.size >= batchSize) {
     await deleteCollection(collectionRef, batchSize);
   }
 }
@@ -65,7 +86,10 @@ function renderItem(d) {
   let takenInfo = '';
   if (t.takenBy && t.takenAt) {
     const takenDate = t.takenAt.toDate ? t.takenAt.toDate() : new Date(t.takenAt);
-    takenInfo = `<div class="text-success small mt-1"><i class="bi bi-person-check-fill me-1"></i>Pris en charge par <strong>${t.takenBy}</strong> le ${formatDate(takenDate)}</div>`;
+    takenInfo = `<div class="text-success small mt-1">
+      <i class="bi bi-person-check-fill me-1"></i>
+      Pris en charge par <strong>${t.takenBy}</strong> le ${formatDate(takenDate)}
+    </div>`;
   }
 
   const meta = `Par ${t.email || t.createdBy} • ${formatDate(t.createdAt)} • #${id}`;
@@ -116,7 +140,7 @@ function refreshList() {
 filterStatus?.addEventListener('change', refreshList);
 inputSearch?.addEventListener('input', refreshList);
 
-// Changement statut + historique avec nom réel
+// Changement statut + historique avec nom
 elList.addEventListener('change', async (e) => {
   const sel = e.target.closest('select[data-id]');
   if (!sel) return;
@@ -131,9 +155,11 @@ elList.addEventListener('change', async (e) => {
   let changedBy = 'Admin';
 
   if (currentUser) {
+    // Priorité 1 : displayName Auth
     if (currentUser.displayName) {
       changedBy = currentUser.displayName;
     } else {
+      // Priorité 2 : displayName dans /users
       try {
         const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
         if (userSnap.exists() && userSnap.data().displayName) {
@@ -170,6 +196,7 @@ elList.addEventListener('change', async (e) => {
 
     toast(`Statut → ${newStatus}`);
     sel.setAttribute('data-current', newStatus);
+
   } catch (err) {
     console.error('[admin] update failed', err);
     toast('Échec : ' + (err?.code || err?.message || 'Erreur'));
@@ -177,7 +204,7 @@ elList.addEventListener('change', async (e) => {
   }
 });
 
-// Suppression + nettoyage history
+// Suppression + nettoyage
 elList.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-delete]');
   if (!btn) return;
@@ -202,7 +229,7 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
   }
 });
 
-// Affichage historique
+// Historique (affichage avec nom)
 elList.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-history]');
   if (!btn) return;
@@ -227,6 +254,7 @@ elList.addEventListener('click', async (e) => {
     snap.forEach(ds => {
       const h = ds.data();
       const date = h.changedAt ? formatDate(h.changedAt.toDate ? h.changedAt.toDate() : new Date(h.changedAt)) : '?';
+
       html += `
         <div class="list-group-item">
           <div class="d-flex justify-content-between">
@@ -240,10 +268,11 @@ elList.addEventListener('click', async (e) => {
           </div>
         </div>`;
     });
+
     content.innerHTML = html;
   } catch (err) {
     console.error('[history] load failed', err);
-    content.innerHTML = `<div class="alert alert-danger">Erreur chargement historique</div>`;
+    content.innerHTML = '<div class="alert alert-danger">Erreur chargement historique</div>';
   }
 });
 

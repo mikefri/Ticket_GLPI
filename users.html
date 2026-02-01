@@ -4,60 +4,33 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Utilisateurs & Rôles — Administration</title>
-
-  <!-- Bootstrap & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-
-  <!-- Styles -->
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
 
-<!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
     <a class="navbar-brand d-flex align-items-center" href="index.html">
       <img src="assets/img/GLPI.png" alt="Centre d’assistance" class="brand-logo">
       <span class="ms-2">Centre d’assistance</span>
     </a>
-
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain"
-            aria-controls="navbarsMain" aria-expanded="false" aria-label="Basculer la navigation">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain" aria-controls="navbarsMain" aria-expanded="false" aria-label="Basculer la navigation">
       <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
     </button>
-
     <div class="collapse navbar-collapse" id="navbarsMain">
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
-        <li class="nav-item">
-          <a class="nav-link" href="index.html">Demander une assistance</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="tickets.html">Mes demandes</a>
-        </li>
-
-        <!-- Lien Admin (affiché par JS si rôle admin) -->
-        <li class="nav-item d-none" id="nav-admin">
-          <a class="nav-link" href="admin.html">Administration</a>
-        </li>
-
-        <!-- Lien Utilisateurs & Rôles (page courante) -->
-        <li class="nav-item d-none" id="nav-users">
-          <a class="nav-link active" aria-current="page" href="users.html">Utilisateurs & Rôles</a>
-        </li>
-
-        <!-- Lien Statistiques (affiché par JS si rôle admin) -->
-        <li class="nav-item d-none" id="nav-stats">
-          <a class="nav-link" href="stats.html">Statistiques</a>
-        </li>
+        <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
+        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes</a></li>
+        <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
+        <li class="nav-item d-none" id="nav-users"><a class="nav-link active" aria-current="page" href="users.html">Utilisateurs & Rôles</a></li>
+        <li class="nav-item d-none" id="nav-stats"><a class="nav-link" href="stats.html">Statistiques</a></li>
       </ul>
-
       <div class="d-flex align-items-center gap-2">
-        <!-- Badge Admin -->
         <span id="badge-admin" class="badge rounded-pill bg-warning text-dark ms-1 d-none">
           <i class="bi bi-shield-lock-fill me-1"></i>Admin
         </span>
-
         <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
         <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
         <div id="avatar" class="avatar-circle ms-2 d-none">U</div>
@@ -66,14 +39,11 @@
   </div>
 </nav>
 
-<!-- MAIN -->
 <main class="container my-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="mb-0">Utilisateurs</h4>
     <div class="d-flex align-items-center gap-2">
-      <input type="search" id="search" class="form-control form-control-sm" style="width:260px"
-             placeholder="Rechercher (email, nom)…">
-      <!-- Bouton création (Option B) -->
+      <input type="search" id="search" class="form-control form-control-sm" style="width:260px" placeholder="Rechercher (email, nom)…">
       <button class="btn btn-primary btn-sm" id="btn-open-create">
         <i class="bi bi-person-plus"></i> Créer un utilisateur
       </button>
@@ -106,7 +76,6 @@
   <small>© 2026 • Centre d’assistance — Méthodes Logistiques</small>
 </footer>
 
-<!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
     <div class="toast-header">
@@ -117,7 +86,6 @@
   </div>
 </div>
 
-<!-- Modal création utilisateur (Option B) -->
 <div class="modal fade" id="modal-create-user" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog">
     <form class="modal-content" id="form-create-user">
@@ -128,11 +96,19 @@
       <div class="modal-body">
         <div class="mb-3">
           <label class="form-label">Email *</label>
-          <input type="email" class="form-control" id="cu-email" required>
+          <input type="email" class="form-control" id="cu-email" required autocomplete="off">
         </div>
         <div class="mb-3">
-          <label class="form-label">Nom affiché</label>
-          <input type="text" class="form-control" id="cu-displayName" placeholder="(optionnel)">
+          <label class="form-label">Nom affiché *</label>
+          <input type="text" class="form-control" id="cu-displayName" required placeholder="Prénom Nom">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Mot de passe temporaire *</label>
+          <input type="password" class="form-control" id="cu-password" required minlength="8" autocomplete="new-password">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Confirmer le mot de passe</label>
+          <input type="password" class="form-control" id="cu-password-confirm" required>
         </div>
         <div class="form-check mb-2">
           <input class="form-check-input" type="checkbox" id="cu-makeAdmin">
@@ -142,21 +118,19 @@
           <input class="form-check-input" type="checkbox" id="cu-canCreate" checked>
           <label class="form-check-label" for="cu-canCreate">Autoriser la création de tickets</label>
         </div>
-        <div class="alert alert-info small">
-          Un <strong>lien de réinitialisation de mot de passe</strong> sera généré.
-          Copiez-le et envoyez-le à l’utilisateur.
+        <div class="alert alert-warning small mt-3">
+          <strong>Important :</strong> Notez le mot de passe et transmettez-le à l’utilisateur de façon sécurisée. Il pourra le changer via « Mot de passe oublié ».
         </div>
         <div id="cu-result" class="small text-muted d-none"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Annuler</button>
-        <button class="btn btn-primary" type="submit" id="cu-submit">Créer</button>
+        <button class="btn btn-primary" type="submit" id="cu-submit">Créer l’utilisateur</button>
       </div>
     </form>
   </div>
 </div>
 
-<!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script type="module" src="assets/js/users.js"></script>
 </body>

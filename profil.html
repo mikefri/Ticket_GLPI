@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mon Profil – Centre d’assistance</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<!-- NAVBAR (identique aux autres pages) -->
+<nav class="navbar navbar-expand-lg sncftop">
+  <div class="container">
+    <a class="navbar-brand d-flex align-items-center" href="index.html">
+      <img src="assets/img/GLPI.png" alt="" class="brand-logo"/>
+      <span class="ms-2">Centre d’assistance</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain">
+      <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarsMain">
+      <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
+        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes</a></li>
+        <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
+        <li class="nav-item d-none" id="nav-users"><a class="nav-link" href="users.html">Utilisateurs & Rôles</a></li>
+        <li class="nav-item"><a class="nav-link active" href="profil.html">Mon profil</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-2">
+        <span id="badge-admin" class="badge rounded-pill bg-warning text-dark ms-1 d-none">
+          <i class="bi bi-shield-lock-fill me-1"></i>Admin
+        </span>
+        <button id="btn-logout" class="btn btn-outline-light btn-sm">Se déconnecter</button>
+        <div id="avatar" class="avatar-circle ms-2 d-none">U</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="container my-5">
+  <h3 class="mb-4">Mon profil</h3>
+
+  <div class="row">
+    <div class="col-lg-6">
+      <!-- Infos personnelles -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <i class="bi bi-person-circle me-2"></i> Informations personnelles
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label fw-bold">Nom affiché</label>
+            <input type="text" class="form-control" id="profil-name" placeholder="Chargement...">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-bold">Email</label>
+            <input type="email" class="form-control" id="profil-email" disabled>
+          </div>
+          <button class="btn btn-primary" id="btn-save-name">
+            <i class="bi bi-save me-2"></i> Enregistrer le nom
+          </button>
+        </div>
+      </div>
+
+      <!-- Changer mot de passe -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <i class="bi bi-key me-2"></i> Changer mon mot de passe
+        </div>
+        <div class="card-body">
+          <div class="mb-3">
+            <label class="form-label">Nouveau mot de passe</label>
+            <input type="password" class="form-control" id="new-password" minlength="8">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Confirmer</label>
+            <input type="password" class="form-control" id="confirm-password">
+          </div>
+          <button class="btn btn-success" id="btn-change-password">
+            <i class="bi bi-check-circle me-2"></i> Mettre à jour le mot de passe
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-6">
+      <!-- Infos supplémentaires (optionnel) -->
+      <div class="card mb-4">
+        <div class="card-header">
+          <i class="bi bi-info-circle me-2"></i> Informations compte
+        </div>
+        <div class="card-body">
+          <p><strong>ID utilisateur :</strong> <span id="profil-uid"></span></p>
+          <p><strong>Date de création :</strong> <span id="profil-created"></span></p>
+          <p><strong>Peut créer des tickets :</strong> <span id="profil-cancreate"></span></p>
+        </div>
+      </div>
+
+      <!-- Tickets récents (optionnel) -->
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-list-task me-2"></i> Mes derniers tickets
+        </div>
+        <div class="card-body" id="recent-tickets">
+          <p class="text-muted">Chargement...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="text-center py-4">
+  <small>© 2026 • Centre d’assistance – Méthodes Logistiques</small>
+</footer>
+
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toast" class="toast" role="status">
+    <div class="toast-header">
+      <strong class="me-auto">Profil</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+    </div>
+    <div id="toast-body" class="toast-body"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module" src="assets/js/profil.js"></script>
+</body>
+</html>

@@ -4,16 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Centre d’assistance – Méthodes Logistiques — Administration</title>
-
   <!-- Bootstrap & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-
   <!-- Ton CSS -->
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
-
 <!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
@@ -21,31 +18,28 @@
       <img src="assets/img/GLPI.png" alt="" class="brand-logo"/>
       <span class="ms-2">Centre d’assistance</span>
     </a>
-
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain"
             aria-controls="navbarsMain" aria-expanded="false" aria-label="Basculer la navigation">
       <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
     </button>
-
     <div class="collapse navbar-collapse" id="navbarsMain">
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
         <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
         <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d’assistance</a></li>
         <!-- Lien Admin (masqué par défaut, affiché si rôle admin) -->
         <li class="nav-item d-none" id="nav-admin"><a class="nav-link active" href="admin.html">Administration</a></li>
-        
-<li id="nav-users" class="d-none">
-  <a class="nav-link" href="users.html">Utilisateurs & Rôles</a>
-</li>
-
-        
-      <li class="nav-item d-none" id="nav-stats">
-      <a class="nav-link" href="stats.html">Statistiques</a>
-      </li>
+       
+        <li id="nav-users" class="d-none">
+          <a class="nav-link" href="users.html">Utilisateurs & Rôles</a>
+        </li>
+       
+        <li class="nav-item d-none" id="nav-stats">
+          <a class="nav-link" href="stats.html">Statistiques</a>
+        </li>
       </ul>
-      
+     
       <div class="d-flex align-items-center gap-2">
-        
+       
         <!-- Badge Admin -->
         <span id="badge-admin" class="badge rounded-pill bg-warning text-dark ms-1 d-none">
           <i class="bi bi-shield-lock-fill me-1"></i>Admin
@@ -122,10 +116,29 @@
   </div>
 </div>
 
+<!-- Modal Historique -->
+<div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="historyModalLabel">Historique du ticket</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+        <div id="history-content" class="list-group list-group-flush small">
+          <!-- Contenu injecté dynamiquement -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- JS Bootstrap -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- Module de page (importe app.js en interne) -->
+<!-- Module de page -->
 <script type="module" src="assets/js/admin.js"></script>
 </body>
 </html>

@@ -11,6 +11,35 @@
 
   <!-- Thème SNCF -->
   <link rel="stylesheet" href="assets/css/styles.css">
+    <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js')
+        .then((registration) => {
+          console.log('✅ Service Worker enregistré');
+          
+          registration.addEventListener('updatefound', () => {
+            const newWorker = registration.installing;
+            newWorker.addEventListener('statechange', () => {
+              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                console.log('📥 Mise à jour disponible');
+              }
+            });
+          });
+        })
+        .catch((error) => console.error('❌ Erreur SW:', error));
+    }
+
+    // Gestion du mode hors ligne
+    window.addEventListener('offline', () => {
+      document.body.classList.add('offline');
+      console.log('📴 Vous êtes hors ligne');
+    });
+
+    window.addEventListener('online', () => {
+      document.body.classList.remove('offline');
+      console.log('📡 Vous êtes en ligne');
+    });
+  </script>
 </head>
 <body>
 

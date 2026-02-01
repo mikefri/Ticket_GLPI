@@ -2,7 +2,7 @@
   "name": "Ticket_GLPI",
   "short_name": "Ticket_GLPI",
   "description": "Ticket_GLPI",
-  "start_url": "/",
+  "start_url": "./index.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#ffffff",

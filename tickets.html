@@ -3,18 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Centre d’assistance – Méthodes Logistiques</title>
+  <title>Mes demandes d’assistance – Centre d’assistance</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
+
+<!-- NAVBAR harmonisée -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
     <!-- Logo + titre -->
     <a class="navbar-brand d-flex align-items-center" href="index.html">
       <img src="assets/img/GLPI.png" alt="Logo" class="brand-logo me-2" />
-      <span class="fw-semibold">Centre d’assistance</span>
+      <span class="fw-semibold">Centre d’assistance – Méthodes Logistiques</span>
     </a>
 
     <!-- Burger mobile -->
@@ -31,7 +33,7 @@
           <a class="nav-link" href="index.html">Demander une assistance</a>
         </li>
         <li class="nav-item">
-          <a class="nav-link" href="tickets.html">Mes demandes</a>
+          <a class="nav-link active" aria-current="page" href="tickets.html">Mes demandes</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="profil.html">Mon profil</a>
@@ -48,12 +50,10 @@
         </li>
       </ul>
 
-      <!-- Zone droite : connexion / logout / avatar / badge / nom -->
+      <!-- Zone droite -->
       <div class="d-flex align-items-center gap-3 ms-lg-3">
-        <!-- Nom utilisateur (quand connecté) -->
-        <span class="navbar-text small d-none" id="user-display">
-          <!-- JS remplira : Bonjour Michael F -->
-        </span>
+        <!-- Nom utilisateur -->
+        <span class="navbar-text small d-none" id="user-display"></span>
 
         <!-- Badge Admin -->
         <span id="badge-admin" class="badge rounded-pill bg-warning text-dark d-none">
@@ -63,7 +63,7 @@
         <!-- Avatar -->
         <div id="avatar" class="avatar-circle d-none"></div>
 
-        <!-- Boutons connexion/déconnexion -->
+        <!-- Connexion / Déconnexion -->
         <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
         <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
       </div>
@@ -71,37 +71,69 @@
   </div>
 </nav>
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Mes tickets</h4>
-    <div class="d-flex gap-2">
+<!-- MAIN -->
+<main class="container my-5">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-center align-items-md-start mb-4 gap-3">
+    <h3 class="mb-0">Mes demandes d’assistance</h3>
+
+    <div class="d-flex flex-wrap gap-2">
+      <!-- Filtres -->
       <select class="form-select form-select-sm" id="filter-status" style="width: 180px;">
         <option value="">Tous les statuts</option>
-        <option>Ouvert</option>
-        <option>En cours</option>
-        <option>En attente</option>
-        <option>Résolu</option>
-        <option>Fermé</option>
+        <option value="Ouvert">Ouvert</option>
+        <option value="En cours">En cours</option>
+        <option value="En attente">En attente</option>
+        <option value="Résolu">Résolu</option>
+        <option value="Fermé">Fermé</option>
       </select>
+
       <select class="form-select form-select-sm" id="filter-category" style="width: 180px;">
         <option value="">Toutes catégories</option>
-        <option>Matériel</option>
-        <option>Logiciel</option>
-        <option>Accès</option>
-        <option>Réseau</option>
-        <option>Autre</option>
+        <option value="Matériel">Matériel</option>
+        <option value="Logiciel">Logiciel</option>
+        <option value="Accès">Accès</option>
+        <option value="Réseau">Réseau</option>
+        <option value="Autre">Autre</option>
       </select>
+
+      <!-- Bouton créer (toujours visible) -->
+      <a href="index.html" class="btn btn-primary btn-sm">
+        <i class="bi bi-plus-lg me-1"></i> Créer un ticket
+      </a>
     </div>
   </div>
 
+  <!-- Liste des tickets -->
   <div id="list" class="vstack gap-3"></div>
-  <p id="empty" class="text-muted">Aucun ticket. Créez votre premier ticket.</p>
+
+  <!-- Message vide -->
+  <div id="empty" class="text-center py-5 text-muted d-none">
+    <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
+    <p class="lead mb-2">Aucun ticket pour le moment</p>
+    <p class="mb-4">Commencez par créer votre première demande d’assistance.</p>
+    <a href="index.html" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i> Créer un ticket
+    </a>
+  </div>
 </main>
-<footer class="text-center py-4">
-  <small>© 2026 • Centre d’assistance – Méthodes Logistiques</small>
+
+<footer class="text-center py-4 bg-light border-top">
+  <small class="text-muted">© 2026 • Centre d’assistance – Méthodes Logistiques</small>
 </footer>
 
-<script type="module" src="assets/js/tickets.js"></script>
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
+    <div class="toast-header">
+      <strong class="me-auto">Centre d’assistance</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+    </div>
+    <div id="toast-body" class="toast-body"></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script type="module" src="assets/js/app.js"></script>
+<script type="module" src="assets/js/tickets.js"></script>
 </body>
 </html>

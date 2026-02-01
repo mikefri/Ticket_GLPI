@@ -23,29 +23,41 @@ const STATIC_ASSETS = [
   '/LICENSE'
 ];
 
-// Installation du Service Worker
+// Installation du Service Worker - SOUPLE (pas de blocage)
 self.addEventListener('install', (event) => {
-  console.log('Service Worker installation en cours...');
+  console.log('🔧 Service Worker installation en cours...');
   
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
-        console.log('Cache ouvert, ajout des assets statiques');
-        return cache.addAll(STATIC_ASSETS);
-      })
-      .then(() => {
-        console.log('Assets statiques en cache');
+        console.log('📦 Cache ouvert');
+        
+        // Mettre en cache les fichiers un par un (sans bloquer)
+        STATIC_ASSETS.forEach((asset) => {
+          fetch(asset)
+            .then((response) => {
+              if (response && response.status === 200) {
+                cache.put(asset, response);
+                console.log(`✅ ${asset} en cache`);
+              }
+            })
+            .catch(() => {
+              console.warn(`⚠️ ${asset} non trouvé (ce n'est pas grave)`);
+            });
+        });
+        
         self.skipWaiting();
       })
       .catch((error) => {
-        console.error('Erreur lors de la mise en cache des assets:', error);
+        console.error('❌ Erreur cache:', error);
+        self.skipWaiting();
       })
   );
 });
 
 // Activation du Service Worker
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker activation en cours...');
+  console.log('🚀 Service Worker activation en cours...');
   
   event.waitUntil(
     caches.keys()
@@ -54,12 +66,15 @@ self.addEventListener('activate', (event) => {
           cacheNames
             .filter((cacheName) => cacheName !== CACHE_NAME)
             .map((cacheName) => {
-              console.log('Suppression du cache ancien:', cacheName);
+              console.log(`🗑️ Suppression du cache ancien: ${cacheName}`);
               return caches.delete(cacheName);
             })
         );
       })
-      .then(() => self.clients.claim())
+      .then(() => {
+        console.log('✅ Activation terminée');
+        return self.clients.claim();
+      })
   );
 });
 
@@ -73,7 +88,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Ignorer les requêtes externes non essentielles
+  // Ignorer les requêtes externes (Firebase, etc)
   if (url.origin !== location.origin) {
     return;
   }
@@ -82,21 +97,23 @@ self.addEventListener('fetch', (event) => {
   if (request.destination === 'style' || 
       request.destination === 'script' || 
       request.destination === 'image') {
+    
     event.respondWith(
       caches.match(request)
         .then((response) => {
+          // Si en cache, retourner immédiatement
           if (response) {
             return response;
           }
           
+          // Sinon, fetch et mettre en cache
           return fetch(request)
             .then((response) => {
-              // Ne pas cacher les réponses non-succès
-              if (!response || response.status !== 200 || response.type === 'error') {
+              if (!response || response.status !== 200) {
                 return response;
               }
               
-              // Cacher la réponse
+              // Cloner et mettre en cache
               const responseToCache = response.clone();
               caches.open(CACHE_NAME)
                 .then((cache) => {
@@ -106,14 +123,12 @@ self.addEventListener('fetch', (event) => {
               return response;
             })
             .catch(() => {
-              // Fallback pour les erreurs réseau
+              // Fallback en cas d'erreur
               if (request.destination === 'image') {
-                return caches.match('/assets/img/logo-technicentre.svg');
+                return caches.match('/assets/img/logo-technicentre.svg')
+                  .catch(() => new Response('Image non disponible', { status: 404 }));
               }
-              return new Response('Ressource non disponible', {
-                status: 503,
-                statusText: 'Service Unavailable'
-              });
+              return new Response('Ressource non disponible', { status: 503 });
             });
         })
     );
@@ -135,7 +150,7 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => {
-        // Fallback au cache en cas d'erreur réseau
+        // Mode hors ligne: essayer le cache
         return caches.match(request)
           .then((response) => {
             if (response) {
@@ -143,14 +158,12 @@ self.addEventListener('fetch', (event) => {
             }
             
             // Fallback pour les pages HTML
-            if (request.headers.get('accept').includes('text/html')) {
-              return caches.match('/index.html');
+            if (request.headers.get('accept')?.includes('text/html')) {
+              return caches.match('/index.html')
+                .catch(() => new Response('Page non disponible (hors ligne)', { status: 503 }));
             }
             
-            return new Response('Hors ligne - Ressource non disponible', {
-              status: 503,
-              statusText: 'Service Unavailable'
-            });
+            return new Response('Hors ligne - Ressource non disponible', { status: 503 });
           });
       })
   );
@@ -159,10 +172,12 @@ self.addEventListener('fetch', (event) => {
 // Gestion des messages depuis le client
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
+    console.log('📤 Mise à jour du SW...');
     self.skipWaiting();
   }
   
   if (event.data && event.data.type === 'CLEAR_CACHE') {
+    console.log('🗑️ Vidage du cache...');
     caches.delete(CACHE_NAME);
   }
 });
@@ -170,9 +185,12 @@ self.addEventListener('message', (event) => {
 // Synchronisation en arrière-plan (optionnel)
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-tickets') {
+    console.log('🔄 Synchronisation des tickets...');
     event.waitUntil(
       fetch('/api/tickets')
-        .catch(() => console.log('Synchronisation échouée'))
+        .catch(() => console.log('⚠️ Synchronisation échouée'))
     );
   }
 });
+
+console.log('✨ Service Worker chargé - Version:', CACHE_NAME);

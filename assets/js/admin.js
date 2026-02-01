@@ -45,6 +45,17 @@ function renderItem(d) {
   const details =
     `${badgeForStatus(t.status)} ${badgeForPriority(t.priority)} ` +
     `<span class="ms-2 text-muted small">${t.category}${t.type ? ' • ' + t.type : ''}</span>`;
+  
+  // Information de prise en charge
+  let takenInfo = '';
+  if (t.takenBy && t.takenAt) {
+    const takenDate = t.takenAt.toDate ? t.takenAt.toDate() : new Date(t.takenAt);
+    takenInfo = `<div class="text-success small mt-1">
+      <i class="bi bi-person-check-fill me-1"></i>
+      Pris en charge par <strong>${t.takenBy}</strong> le ${formatDate(takenDate)}
+    </div>`;
+  }
+  
   const meta =
     `Par ${t.email || t.createdBy} • ${formatDate(t.createdAt)} • #${id}`;
 
@@ -61,10 +72,11 @@ function renderItem(d) {
   <div class="card soft">
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-        <div>
+        <div style="flex: 1;">
           <h5 class="card-title mb-1">${t.title}</h5>
           <div class="mb-2">${details}</div>
           <div class="text-muted small">${meta}</div>
+          ${takenInfo}
         </div>
         <div class="d-flex align-items-center gap-2">
           <select class="form-select form-select-sm" data-id="${id}" data-current="${t.status}">
@@ -106,8 +118,19 @@ elList.addEventListener('change', async (e) => {
   if (!sel) return;
   const id = sel.getAttribute('data-id');
   const newStatus = sel.value;
+  const oldStatus = sel.getAttribute('data-current');
+  
   try {
-    await updateDoc(doc(db, 'tickets', id), { status: newStatus });
+    const updateData = { status: newStatus };
+    
+    // Si passage de "Ouvert" à "En cours", enregistrer la prise en charge
+    if (oldStatus === 'Ouvert' && newStatus === 'En cours') {
+      const user = window.__currentUser;
+      updateData.takenBy = user?.displayName || user?.email || 'Admin';
+      updateData.takenAt = new Date();
+    }
+    
+    await updateDoc(doc(db, 'tickets', id), updateData);
     toast('Statut mis à jour');
     sel.setAttribute('data-current', newStatus);
   } catch (err) {

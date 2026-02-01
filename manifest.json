@@ -10,13 +10,13 @@
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/assets/img/GLPI.png",
+      "src": "/assets/img/glpi192x192.png",
       "sizes": "192x192",
       "type": "image/svg+xml",
       "purpose": "any"
     },
     {
-      "src": "/assets/img/GLPI.png",
+      "src": "/assets/img/glpi512x512.png",
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any"

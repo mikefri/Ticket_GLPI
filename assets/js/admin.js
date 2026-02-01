@@ -1,4 +1,4 @@
-// Page Administration – affiche le NOM au lieu de l'email
+// Page Administration – affiche le NOM (displayName) au lieu de l'email ou "Admin"
 
 import './app.js';
 import { db } from './firebase-init.js';
@@ -34,28 +34,51 @@ async function isUserAdmin(uid) {
   }
 }
 
-// Helper : obtenir le nom d'un utilisateur (priorité : displayName > /users > email)
-async function getUserDisplayName(uid, fallbackEmail = '') {
-  if (!uid) return 'Admin';
+// Fonction clé : récupérer le nom d'affichage (priorité : Auth → Firestore → email → Admin)
+async function getDisplayName(user, uid) {
+  if (!user && !uid) return 'Admin';
 
+  const targetUid = uid || user?.uid;
+  if (!targetUid) return 'Admin';
+
+  // 1. Directement depuis l'objet Auth (le plus rapide)
+  if (user?.displayName && user.displayName.trim()) {
+    console.log('[getDisplayName] trouvé dans Auth:', user.displayName);
+    return user.displayName.trim();
+  }
+
+  // 2. Depuis Firestore /users/{uid}
   try {
-    const userSnap = await getDoc(doc(db, 'users', uid));
-    if (userSnap.exists() && userSnap.data().displayName) {
-      return userSnap.data().displayName;
+    console.log('[getDisplayName] lecture /users/' + targetUid);
+    const userSnap = await getDoc(doc(db, 'users', targetUid));
+    
+    if (userSnap.exists()) {
+      const data = userSnap.data();
+      if (data.displayName && data.displayName.trim()) {
+        console.log('[getDisplayName] trouvé dans Firestore:', data.displayName);
+        return data.displayName.trim();
+      } else {
+        console.log('[getDisplayName] /users existe mais pas de displayName');
+      }
+    } else {
+      console.log('[getDisplayName] document /users/' + targetUid + ' n\'existe PAS');
     }
-  } catch (e) {
-    console.warn('[getUserDisplayName] lecture /users échouée', e);
+  } catch (err) {
+    console.error('[getDisplayName] erreur lecture Firestore:', err);
   }
 
-  // Fallback email → prenom.nom
-  if (fallbackEmail) {
-    return fallbackEmail.split('@')[0];
+  // 3. Fallback : partie avant @ de l'email
+  if (user?.email) {
+    const nameFromEmail = user.email.split('@')[0];
+    console.log('[getDisplayName] fallback email:', nameFromEmail);
+    return nameFromEmail;
   }
 
+  console.log('[getDisplayName] fallback final: Admin');
   return 'Admin';
 }
 
-// Suppression récursive history
+// Suppression récursive d'une collection (history)
 async function deleteCollection(collectionRef, batchSize = 400) {
   const snap = await getDocs(collectionRef);
   if (snap.empty) return;
@@ -76,7 +99,7 @@ async function deleteCollection(collectionRef, batchSize = 400) {
   }
 }
 
-// Rendu carte ticket
+// Rendu carte ticket (on garde pris en charge par nom quand possible)
 function renderItem(d) {
   const t = d.data();
   const id = d.id;
@@ -92,7 +115,7 @@ function renderItem(d) {
     </div>`;
   }
 
-  const meta = `Par ${t.email || t.createdBy} • ${formatDate(t.createdAt)} • #${id}`;
+  const meta = `Par ${t.email || t.createdBy || 'Inconnu'} • ${formatDate(t.createdAt)} • #${id}`;
 
   const deleteBtn = window.__isAdmin ? `<button type="button" class="btn btn-outline-danger btn-sm" title="Supprimer" data-delete="${id}"><i class="bi bi-trash"></i></button>` : '';
 
@@ -124,6 +147,7 @@ function renderItem(d) {
 function refreshList() {
   const q = (inputSearch.value || '').toLowerCase();
   const fs = filterStatus.value;
+
   const filtered = data.filter(d => {
     const t = d.data();
     const matchStatus = fs ? t.status === fs : true;
@@ -134,6 +158,18 @@ function refreshList() {
   elList.innerHTML = '';
   show(elEmpty, filtered.length === 0);
   filtered.forEach(d => elList.insertAdjacentHTML('beforeend', renderItem(d)));
+
+  // Rafraîchissement async des noms (pour les anciens takenBy)
+  setTimeout(async () => {
+    const takenElements = document.querySelectorAll('.text-success strong');
+    for (const el of takenElements) {
+      const current = el.textContent.trim();
+      if (current === 'Admin' || current.includes('@')) {
+        const name = await getDisplayName(null, current);
+        el.textContent = name;
+      }
+    }
+  }, 500);
 }
 
 // Listeners filtres
@@ -152,26 +188,7 @@ elList.addEventListener('change', async (e) => {
   if (newStatus === oldStatus) return;
 
   const currentUser = window.__currentUser;
-  let changedBy = 'Admin';
-
-  if (currentUser) {
-    // Priorité 1 : displayName Auth
-    if (currentUser.displayName) {
-      changedBy = currentUser.displayName;
-    } else {
-      // Priorité 2 : displayName dans /users
-      try {
-        const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
-        if (userSnap.exists() && userSnap.data().displayName) {
-          changedBy = userSnap.data().displayName;
-        } else if (currentUser.email) {
-          changedBy = currentUser.email.split('@')[0];
-        }
-      } catch (err) {
-        console.warn('[changedBy] lecture /users échouée', err);
-      }
-    }
-  }
+  const changedBy = await getDisplayName(currentUser, currentUser?.uid);
 
   try {
     const ticketRef = doc(db, 'tickets', id);
@@ -204,7 +221,7 @@ elList.addEventListener('change', async (e) => {
   }
 });
 
-// Suppression + nettoyage
+// Suppression + nettoyage history
 elList.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-delete]');
   if (!btn) return;
@@ -229,7 +246,7 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
   }
 });
 
-// Historique (affichage avec nom)
+// Affichage historique
 elList.addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-history]');
   if (!btn) return;

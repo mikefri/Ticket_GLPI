@@ -91,7 +91,7 @@
 }
 
 .col-id {
-  width: 80px;
+  width: 60px;
   flex-shrink: 0;
 }
 
@@ -128,6 +128,7 @@
   color: #ddd;
   transition: background .15s;
   cursor: pointer;
+  align-items: flex-start;
 }
 
 .ticket-row:hover {
@@ -139,7 +140,7 @@
 }
 
 .ticket-id {
-  width: 80px;
+  width: 60px;
   flex-shrink: 0;
   color: #64b5f6;
   font-weight: 600;
@@ -148,10 +149,11 @@
 .ticket-label {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   text-align: center;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  line-height: 1.3;
 }
 
 .ticket-client,

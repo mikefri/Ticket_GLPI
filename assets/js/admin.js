@@ -112,7 +112,7 @@ function renderItem(d) {
     const date = t.takenAt.toDate ? t.takenAt.toDate() : new Date(t.takenAt);
     takenInfo = `<div class="text-success small mt-1">
       <i class="bi bi-person-check-fill me-1"></i>
-      Pris en charge par <strong>${t.userName}</strong> le ${formatDate(date)}
+      Pris en charge par <strong>${t.takenBy}</strong> le ${formatDate(date)}
     </div>`;
   }
 

@@ -44,10 +44,11 @@ function createTicketRow(ticket, columnType) {
   
   const days = daysSince(ticket.createdAt);
   
-  // ID
+  // ID - tronqué à 5 caractères
   const idDiv = document.createElement('div');
   idDiv.className = 'ticket-id';
-  idDiv.textContent = ticket.id;
+  idDiv.textContent = ticket.id.substring(0, 5);
+  idDiv.title = ticket.id; // ID complet au survol
   row.appendChild(idDiv);
   
   // Libellé

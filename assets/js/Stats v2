@@ -1,0 +1,240 @@
+// assets/js/stats-v2.js
+// Page Statistiques V2 - Format GLPI par colonnes (admin only)
+
+import './app.js';
+import { db } from './firebase-init.js';
+import { requireAuth, toast } from './app.js';
+
+import {
+  collection, query, where, orderBy, getDocs, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// Mapping des statuts vers les colonnes
+const STATUS_MAP = {
+  'Ouvert': 'new',
+  'En cours': 'assigned',
+  'En attente': 'progress',
+  'Résolu': 'solved'
+};
+
+// Calcul du nombre de jours depuis la création
+function daysSince(timestamp) {
+  if (!timestamp) return 0;
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  const now = new Date();
+  const diff = now - date;
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+// Formater un nom (prendre initiales ou raccourcir)
+function formatName(name) {
+  if (!name) return '–';
+  const parts = name.trim().split(' ');
+  if (parts.length >= 2) {
+    return `${parts[0]} ${parts[1].charAt(0)}.`;
+  }
+  return name.length > 15 ? name.substring(0, 15) + '…' : name;
+}
+
+// Générer une ligne de ticket
+function createTicketRow(ticket, columnType) {
+  const row = document.createElement('div');
+  row.className = 'ticket-row';
+  row.dataset.id = ticket.id;
+  
+  const days = daysSince(ticket.createdAt);
+  
+  // ID
+  const idDiv = document.createElement('div');
+  idDiv.className = 'ticket-id';
+  idDiv.textContent = ticket.id;
+  row.appendChild(idDiv);
+  
+  // Libellé
+  const labelDiv = document.createElement('div');
+  labelDiv.className = 'ticket-label';
+  labelDiv.textContent = ticket.title || 'Sans titre';
+  labelDiv.title = ticket.title || '';
+  row.appendChild(labelDiv);
+  
+  // Client ou Technicien (selon la colonne)
+  if (columnType === 'new') {
+    const clientDiv = document.createElement('div');
+    clientDiv.className = 'ticket-client';
+    clientDiv.textContent = formatName(ticket.userName);
+    clientDiv.title = ticket.userName || '';
+    row.appendChild(clientDiv);
+  } else {
+    const techDiv = document.createElement('div');
+    techDiv.className = 'ticket-tech';
+    techDiv.innerHTML = `
+      ${formatName(ticket.assignedTo || '–')}
+      ${ticket.assignedToId ? `<span class="ticket-tech-id">(${ticket.assignedToId})</span>` : ''}
+    `;
+    techDiv.title = ticket.assignedTo || '';
+    row.appendChild(techDiv);
+  }
+  
+  // Jours (sauf pour résolus)
+  if (columnType !== 'solved') {
+    const daysDiv = document.createElement('div');
+    daysDiv.className = 'ticket-days';
+    daysDiv.textContent = days;
+    row.appendChild(daysDiv);
+  }
+  
+  // Click pour ouvrir le détail (optionnel)
+  row.addEventListener('click', () => {
+    window.location.href = `ticket-detail.html?id=${ticket.id}`;
+  });
+  
+  return row;
+}
+
+// Charger les tickets par statut
+async function loadTickets() {
+  try {
+    const ticketsRef = collection(db, 'tickets');
+    
+    // Charger tous les tickets (sauf fermés)
+    const q = query(
+      ticketsRef,
+      where('status', 'in', ['Ouvert', 'En cours', 'En attente', 'Résolu']),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    // Grouper par colonne
+    const columns = {
+      new: [],
+      assigned: [],
+      progress: [],
+      solved: []
+    };
+    
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const ticket = { id: doc.id, ...data };
+      const column = STATUS_MAP[ticket.status];
+      if (column) {
+        columns[column].push(ticket);
+      }
+    });
+    
+    // Remplir les colonnes
+    Object.keys(columns).forEach(col => {
+      const countEl = document.getElementById(`count-${col}`);
+      const listEl = document.getElementById(`list-${col}`);
+      
+      if (countEl) countEl.textContent = columns[col].length;
+      
+      if (listEl) {
+        listEl.innerHTML = '';
+        if (columns[col].length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'empty-state';
+          empty.textContent = 'Aucun ticket';
+          listEl.appendChild(empty);
+        } else {
+          columns[col].forEach(ticket => {
+            listEl.appendChild(createTicketRow(ticket, col));
+          });
+        }
+      }
+    });
+    
+    // Charger les stats de fermeture
+    await loadClosedStats();
+    
+  } catch (error) {
+    console.error('[stats-v2] Erreur de chargement:', error);
+    toast('Erreur lors du chargement des statistiques');
+  }
+}
+
+// Charger les stats de tickets fermés par période
+async function loadClosedStats() {
+  const ticketsRef = collection(db, 'tickets');
+  
+  const now = new Date();
+  
+  // Aujourd'hui
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  
+  // Cette semaine (lundi)
+  const weekStart = new Date(now);
+  const dayOfWeek = now.getDay() || 7; // Dimanche = 7
+  weekStart.setDate(now.getDate() - (dayOfWeek - 1));
+  weekStart.setHours(0, 0, 0, 0);
+  
+  // Ce mois
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+  
+  // Cette année
+  const yearStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
+  
+  // Requêtes
+  const qToday = query(ticketsRef, 
+    where('status', '==', 'Fermé'),
+    where('closedAt', '>=', Timestamp.fromDate(todayStart))
+  );
+  
+  const qWeek = query(ticketsRef,
+    where('status', '==', 'Fermé'),
+    where('closedAt', '>=', Timestamp.fromDate(weekStart))
+  );
+  
+  const qMonth = query(ticketsRef,
+    where('status', '==', 'Fermé'),
+    where('closedAt', '>=', Timestamp.fromDate(monthStart))
+  );
+  
+  const qYear = query(ticketsRef,
+    where('status', '==', 'Fermé'),
+    where('closedAt', '>=', Timestamp.fromDate(yearStart))
+  );
+  
+  const qTotal = query(ticketsRef, where('status', '==', 'Fermé'));
+  
+  const [snapToday, snapWeek, snapMonth, snapYear, snapTotal] = await Promise.all([
+    getDocs(qToday),
+    getDocs(qWeek),
+    getDocs(qMonth),
+    getDocs(qYear),
+    getDocs(qTotal)
+  ]);
+  
+  // Mise à jour UI
+  document.getElementById('footer-closed-today').textContent = snapToday.size;
+  document.getElementById('footer-closed-week').textContent = snapWeek.size;
+  document.getElementById('footer-closed-month').textContent = snapMonth.size;
+  document.getElementById('footer-closed-year').textContent = snapYear.size;
+  document.getElementById('footer-closed-total').textContent = snapTotal.size;
+}
+
+// Bouton refresh
+document.getElementById('btn-refresh')?.addEventListener('click', () => {
+  loadTickets();
+  toast('Données actualisées');
+});
+
+// Bootstrap
+(async () => {
+  const user = await requireAuth(true);
+  if (!user) return;
+  
+  // Vérif admin
+  if (window.__isAdmin !== true) {
+    toast('Accès admin requis');
+    setTimeout(() => window.location.href = 'tickets.html', 800);
+    return;
+  }
+  
+  // Afficher les initiales de l'utilisateur
+  const displayName = user.displayName || user.email?.split('@')[0] || 'User';
+  const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+  document.getElementById('user-display').textContent = initials;
+  
+  await loadTickets();
+})();

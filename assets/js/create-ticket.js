@@ -109,9 +109,17 @@ form?.addEventListener('submit', async (e) => {
     return;
   }
 
+  // Validation du champ userName
+  const userNameValue = document.getElementById('userName')?.value.trim();
+  if (!userNameValue) {
+    toast('Veuillez saisir votre nom complet.');
+    return;
+  }
+
   const payload = {
     title: document.getElementById('title').value.trim(),
     description: document.getElementById('description').value.trim(),
+    userName: userNameValue,  // ✅ Nom complet de l'utilisateur
     category: categoryEl.value,
     type: typeHidden.value,
 

@@ -1,0 +1,265 @@
+/* ===== Stats V2 - Style GLPI ===== */
+
+.stats-title {
+  font-weight: 600;
+  color: #333;
+}
+
+/* Colonnes de statut */
+.stat-column {
+  background: #2d2d2d;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* En-têtes des colonnes */
+.stat-header {
+  padding: 16px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+
+.stat-count {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.stat-sublabel {
+  font-size: 0.85rem;
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* Couleurs par statut */
+.stat-new .stat-header {
+  background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%);
+  color: #fff;
+}
+.stat-new .stat-count { color: #64b5f6; }
+
+.stat-assigned .stat-header {
+  background: linear-gradient(135deg, #fbc02d 0%, #f9a825 100%);
+  color: #333;
+}
+.stat-assigned .stat-count { color: #fff; }
+
+.stat-progress .stat-header {
+  background: linear-gradient(135deg, #ff6f00 0%, #e65100 100%);
+  color: #fff;
+}
+.stat-progress .stat-count { color: #ffcc80; }
+
+.stat-solved .stat-header {
+  background: linear-gradient(135deg, #66bb6a 0%, #43a047 100%);
+  color: #fff;
+}
+.stat-solved .stat-count { color: #c8e6c9; }
+
+/* Table de tickets */
+.stat-table {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.stat-table-header {
+  display: flex;
+  background: #3a3a3a;
+  color: #aaa;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+
+.stat-table-header > div {
+  padding: 0 4px;
+}
+
+.col-id {
+  width: 60px;
+  flex-shrink: 0;
+}
+
+.col-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.col-client,
+.col-tech {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.col-days {
+  width: 50px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.stat-table-body {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 500px;
+}
+
+/* Lignes de tickets */
+.ticket-row {
+  display: flex;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  font-size: 0.85rem;
+  color: #ddd;
+  transition: background .15s;
+  cursor: pointer;
+}
+
+.ticket-row:hover {
+  background: rgba(255,255,255,.08);
+}
+
+.ticket-row > div {
+  padding: 0 4px;
+}
+
+.ticket-id {
+  width: 60px;
+  flex-shrink: 0;
+  color: #64b5f6;
+  font-weight: 600;
+}
+
+.ticket-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-client,
+.ticket-tech {
+  width: 120px;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: #bbb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-tech-id {
+  display: block;
+  font-size: 0.7rem;
+  color: #888;
+}
+
+.ticket-days {
+  width: 50px;
+  text-align: center;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: #ffa726;
+}
+
+/* Footer avec indicateurs */
+.stat-footer {
+  background: #2d2d2d;
+  color: #ddd;
+  padding: 20px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 1.5rem;
+  margin-top: 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+
+.stat-footer-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.stat-footer-label {
+  font-weight: 600;
+  color: #aaa;
+}
+
+.stat-footer-value {
+  font-weight: 700;
+  font-size: 2rem;
+}
+
+.stat-footer-period {
+  color: #888;
+  font-size: 0.9rem;
+}
+
+.stat-footer-separator {
+  color: #555;
+  margin: 0 4px;
+}
+
+/* État vide */
+.empty-state {
+  padding: 32px 16px;
+  text-align: center;
+  color: #777;
+  font-size: 0.9rem;
+}
+
+/* Scrollbar personnalisée */
+.stat-table-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.stat-table-body::-webkit-scrollbar-track {
+  background: #252525;
+}
+
+.stat-table-body::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 4px;
+}
+
+.stat-table-body::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}
+
+/* Responsive */
+@media (max-width: 991px) {
+  .stat-column {
+    margin-bottom: 16px;
+  }
+  
+  .stat-count {
+    font-size: 2.5rem;
+  }
+  
+  .stat-footer {
+    font-size: 1.2rem;
+  }
+  
+  .stat-footer-value {
+    font-size: 1.5rem;
+  }
+}

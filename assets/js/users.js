@@ -121,14 +121,26 @@ document.addEventListener('click', async e => {
   btn.disabled = true;
   try {
     if (isAdmin) {
+      // Retirer les droits admin
       await deleteDoc(doc(db, 'admins', uid));
       toast('Rôle admin retiré');
     } else {
-      await setDoc(doc(db, 'admins', uid), {});
-      toast('Promu admin');
+      // --- MODIFICATION ICI ---
+      // 1. On récupère les infos de l'utilisateur actuel
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      const userData = userSnap.exists() ? userSnap.data() : {};
+
+      // 2. On crée le doc admin avec ces infos
+      await setDoc(doc(db, 'admins', uid), {
+        email: userData.email || null,
+        displayName: userData.displayName || null,
+        promotedAt: serverTimestamp() // Ajoute la date de promotion
+      });
+      toast('Promu admin avec succès');
     }
-    await loadPage('first');
+    await loadPage('first'); // Rafraîchit la liste
   } catch (err) {
+    console.error(err);
     toast('Échec modification rôle');
   } finally {
     btn.disabled = false;

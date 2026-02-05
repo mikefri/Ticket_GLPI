@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Méthodes Logistiques – Statistiques des tickets</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="stylesheet" href="assets/css/stats-v2.css">
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg sncftop">
+  <div class="container-fluid">
+    <a class="navbar-brand d-flex align-items-center" href="index.html">
+      <img src="assets/img/GLPI.png" alt="" class="brand-logo"/>
+      <span class="ms-2">Centre d'assistance</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain">
+      <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarsMain">
+      <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
+        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d'assistance</a></li>
+        <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
+        <li class="nav-item d-none" id="nav-stats"><a class="nav-link active" href="stats-v2.html">Statistiques</a></li>
+      </ul>
+      <div class="d-flex align-items-center gap-2">
+         <span id="badge-admin" class="badge rounded-pill bg-warning text-dark ms-1 d-none">
+          <i class="bi bi-shield-lock-fill me-1"></i>Admin
+        </span>
+        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
+        <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
+        <div id="avatar" class="avatar-circle ms-2 d-none">ED</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main class="container-fluid my-4 px-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0 stats-title">
+      <span id="user-display">ED</span> - [Demandes &amp; Incidents] par statut
+    </h4>
+    <button class="btn btn-sm btn-outline-secondary" id="btn-refresh">
+      <i class="bi bi-arrow-clockwise"></i> Actualiser les données
+    </button>
+  </div>
+
+  <!-- Colonnes par statut -->
+  <div class="row g-3 mb-4">
+    <!-- Nouveaux / Ouverts -->
+    <div class="col-12 col-lg-3">
+      <div class="stat-column stat-new">
+        <div class="stat-header">
+          <div class="stat-count" id="count-new">0</div>
+          <div class="stat-label">Nouveaux :</div>
+          <div class="stat-sublabel">En attente de prise en compte</div>
+        </div>
+        <div class="stat-table">
+          <div class="stat-table-header">
+            <div class="col-id">ID</div>
+            <div class="col-label">Libellé</div>
+            <div class="col-client">Client</div>
+            <div class="col-days">Jours</div>
+          </div>
+          <div class="stat-table-body" id="list-new">
+            <!-- Rempli dynamiquement -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- En cours (assigné) -->
+    <div class="col-12 col-lg-3">
+      <div class="stat-column stat-assigned">
+        <div class="stat-header">
+          <div class="stat-count" id="count-assigned">0</div>
+          <div class="stat-label">En cours :</div>
+          <div class="stat-sublabel">En cours de traitement</div>
+        </div>
+        <div class="stat-table">
+          <div class="stat-table-header">
+            <div class="col-id">ID</div>
+            <div class="col-label">Libellé</div>
+            <div class="col-tech">Technicien</div>
+            <div class="col-days">Jours</div>
+          </div>
+          <div class="stat-table-body" id="list-assigned">
+            <!-- Rempli dynamiquement -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- En cours (étendu) -->
+    <div class="col-12 col-lg-3">
+      <div class="stat-column stat-progress">
+        <div class="stat-header">
+          <div class="stat-count" id="count-progress">0</div>
+          <div class="stat-label">En cours :</div>
+          <div class="stat-sublabel">Analyse, veille, sous-traitance...</div>
+        </div>
+        <div class="stat-table">
+          <div class="stat-table-header">
+            <div class="col-id">ID</div>
+            <div class="col-label">Libellé</div>
+            <div class="col-tech">Technicien</div>
+            <div class="col-days">Jours</div>
+          </div>
+          <div class="stat-table-body" id="list-progress">
+            <!-- Rempli dynamiquement -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Résolus -->
+    <div class="col-12 col-lg-3">
+      <div class="stat-column stat-solved">
+        <div class="stat-header">
+          <div class="stat-count" id="count-solved">0</div>
+          <div class="stat-label">Résolus :</div>
+          <div class="stat-sublabel">En attente de clôture</div>
+        </div>
+        <div class="stat-table">
+          <div class="stat-table-header">
+            <div class="col-id">ID</div>
+            <div class="col-label">Libellé</div>
+            <div class="col-tech">Technicien</div>
+          </div>
+          <div class="stat-table-body" id="list-solved">
+            <!-- Rempli dynamiquement -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Indicateurs du bas -->
+  <div class="stat-footer">
+    <div class="stat-footer-item">
+      <span class="stat-footer-label">Clos :</span>
+      <span class="stat-footer-value" id="footer-closed-today">0</span>
+      <span class="stat-footer-period">aujourd'hui</span>
+      <span class="stat-footer-separator">|</span>
+    </div>
+    <div class="stat-footer-item">
+      <span class="stat-footer-value" id="footer-closed-week">0</span>
+      <span class="stat-footer-period">cette semaine</span>
+      <span class="stat-footer-separator">|</span>
+    </div>
+    <div class="stat-footer-item">
+      <span class="stat-footer-value" id="footer-closed-month">0</span>
+      <span class="stat-footer-period">ce mois</span>
+      <span class="stat-footer-separator">|</span>
+    </div>
+    <div class="stat-footer-item">
+      <span class="stat-footer-value" id="footer-closed-year">0</span>
+      <span class="stat-footer-period">cette année</span>
+      <span class="stat-footer-separator">|</span>
+    </div>
+    <div class="stat-footer-item">
+      <span class="stat-footer-value" id="footer-closed-total">0</span>
+      <span class="stat-footer-period">au total</span>
+    </div>
+  </div>
+
+</main>
+
+<footer class="text-center py-4 mt-5">
+  <small>© 2026 • Centre d'assistance – Méthodes Logistiques</small>
+</footer>
+
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
+    <div class="toast-header">
+      <strong class="me-auto">Statistiques</strong>
+      <small>Info</small>
+      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Fermer"></button>
+    </div>
+    <div id="toast-body" class="toast-body">Message…</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Module de page -->
+<script type="module" src="assets/js/stats-v2.js"></script>
+</body>
+</html>

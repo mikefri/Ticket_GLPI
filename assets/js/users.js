@@ -116,29 +116,37 @@ document.addEventListener('click', async e => {
   if (!btn) return;
 
   const uid = btn.dataset.uid;
-  const isAdmin = adminsSet.has(uid);
+  const isAdmin = adminsSet.has(uid); // Vérifie si l'utilisateur est déjà admin
 
-  btn.disabled = true;
+  btn.disabled = true; // Désactive le bouton pendant le chargement
   try {
     if (isAdmin) {
-      // Retirer les droits admin
+      // ============================================================
+      // CAS 1 : IL EST ADMIN -> ON LE RETIRE
+      // ============================================================
+      // deleteDoc supprime le document dans la collection 'admins'.
+      // Peu importe qu'il y ait des champs displayName ou email dedans,
+      // tout le document disparaît.
       await deleteDoc(doc(db, 'admins', uid));
       toast('Rôle admin retiré');
     } else {
-      // --- MODIFICATION ICI ---
-      // 1. On récupère les infos de l'utilisateur actuel
+      // ============================================================
+      // CAS 2 : IL N'EST PAS ADMIN -> ON LE PEMOTE (Votre demande précédente)
+      // ============================================================
       const userSnap = await getDoc(doc(db, 'users', uid));
       const userData = userSnap.exists() ? userSnap.data() : {};
 
-      // 2. On crée le doc admin avec ces infos
       await setDoc(doc(db, 'admins', uid), {
         email: userData.email || null,
         displayName: userData.displayName || null,
-        promotedAt: serverTimestamp() // Ajoute la date de promotion
+        promotedAt: serverTimestamp()
       });
       toast('Promu admin avec succès');
     }
-    await loadPage('first'); // Rafraîchit la liste
+    
+    // On recharge la liste pour mettre à jour les boutons et badges
+    await loadPage('first'); 
+
   } catch (err) {
     console.error(err);
     toast('Échec modification rôle');

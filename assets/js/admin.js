@@ -116,7 +116,8 @@ function renderItem(d) {
     </div>`;
   }
 
-  const meta = `Par ${t.displayName || t.createdBy || 'Inconnu'} • ${formatDate(t.createdAt)} • #${id}`;
+  const authorName = t.userName || t.displayName || (t.email ? t.email.split('@')[0] : t.createdBy) || 'Inconnu';
+const meta = `Par ${authorName} • ${formatDate(t.createdAt)} • #${id}`;
 
   const deleteBtn = window.__isAdmin ? `<button type="button" class="btn btn-outline-danger btn-sm" title="Supprimer" data-delete="${id}"><i class="bi bi-trash"></i></button>` : '';
 

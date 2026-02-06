@@ -43,7 +43,7 @@ async function isUserAdmin(uid) {
 }
 
 // ────────────────────────────────────────────────
-// Récupération nom d’affichage (très robuste)
+// Récupération nom d'affichage (très robuste)
 // ────────────────────────────────────────────────
 async function getDisplayName(user = null, uid = null) {
   const targetUid = uid || user?.uid;
@@ -54,7 +54,7 @@ async function getDisplayName(user = null, uid = null) {
     return user.displayName.trim();
   }
 
-  // 2. Firestore /admins/{uid} (AJOUT)
+  // 2. Firestore /admins/{uid}
   try {
     const adminSnap = await getDoc(doc(db, 'admins', targetUid));
     if (adminSnap.exists()) {
@@ -123,18 +123,18 @@ function renderItem(d) {
   let takenInfo = '';
   if (t.takenBy && t.takenAt) {
     const date = t.takenAt.toDate ? t.takenAt.toDate() : new Date(t.takenAt);
-    takenInfo = `<div class="text-success small mt-1">
+    takenInfo = `<div class="text-success small mt-1" data-uid="${t.takenByUid || ''}">
       <i class="bi bi-person-check-fill me-1"></i>
       Pris en charge par <strong>${t.takenBy}</strong> le ${formatDate(date)}
     </div>`;
   }
 
-const authorName = t.userName || t.displayName || (t.email ? t.email.split('@')[0] : t.createdBy) || 'Inconnu';
-const meta = `Par ${authorName} • ${formatDate(t.createdAt)}`;
+  const authorName = t.userName || t.displayName || (t.email ? t.email.split('@')[0] : t.createdBy) || 'Inconnu';
+  const meta = `Par ${authorName} • ${formatDate(t.createdAt)}`;
 
   const deleteBtn = window.__isAdmin ? `<button type="button" class="btn btn-outline-danger btn-sm" title="Supprimer" data-delete="${id}"><i class="bi bi-trash"></i></button>` : '';
 
-  const historyBtn = `<button type="button" class="btn btn-link btn-sm p-0 mt-2 text-decoration-none" data-history="${id}" title="Voir l’historique"><i class="bi bi-clock-history me-1"></i> Historique</button>`;
+  const historyBtn = `<button type="button" class="btn btn-link btn-sm p-0 mt-2 text-decoration-none" data-history="${id}" title="Voir l'historique"><i class="bi bi-clock-history me-1"></i> Historique</button>`;
 
   return `
   <div class="card soft">
@@ -179,15 +179,25 @@ function refreshList() {
 
   // Rafraîchissement async des noms dans les badges "Pris en charge par"
   setTimeout(async () => {
-    const nameEls = document.querySelectorAll('.text-success strong');
-    for (const el of nameEls) {
-      const current = el.textContent.trim();
-      if (current === 'Admin' || current.includes('@')) {
-        const name = await getDisplayName(null, null); // fallback global pour l'admin courant
-        el.textContent = name;
+    const containers = document.querySelectorAll('.text-success[data-uid]');
+    for (const container of containers) {
+      const uid = container.getAttribute('data-uid');
+      const strongEl = container.querySelector('strong');
+      
+      if (strongEl) {
+        // Si on a un UID stocké, on l'utilise
+        if (uid) {
+          const name = await getDisplayName(null, uid);
+          strongEl.textContent = name;
+        } else {
+          // Sinon on utilise l'admin connecté
+          const currentUser = window.__currentUser;
+          const name = await getDisplayName(currentUser, currentUser?.uid);
+          strongEl.textContent = name;
+        }
       }
     }
-  }, 800); // léger délai pour que le DOM soit prêt
+  }, 800);
 }
 
 // ────────────────────────────────────────────────
@@ -208,7 +218,7 @@ elList.addEventListener('change', async (e) => {
   if (newStatus === oldStatus) return;
 
   const currentUser = window.__currentUser;
-  const changedBy = await getDisplayName(currentUser);
+  const changedBy = await getDisplayName(currentUser, currentUser?.uid);
 
   try {
     const ticketRef = doc(db, 'tickets', id);
@@ -218,6 +228,7 @@ elList.addEventListener('change', async (e) => {
       oldValue: oldStatus,
       newValue: newStatus,
       changedBy,
+      changedByUid: currentUser.uid,
       changedAt: serverTimestamp()
     };
 
@@ -225,6 +236,7 @@ elList.addEventListener('change', async (e) => {
 
     if (oldStatus === 'Ouvert' && newStatus === 'En cours') {
       updateData.takenBy = changedBy;
+      updateData.takenByUid = currentUser.uid;
       updateData.takenAt = serverTimestamp();
     }
 

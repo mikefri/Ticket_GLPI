@@ -248,10 +248,18 @@ elList.addEventListener('change', async (e) => {
 
     const updateData = { status: newStatus };
 
+    // Si passage de Ouvert à En cours → enregistrer la prise en charge
     if (oldStatus === 'Ouvert' && newStatus === 'En cours') {
       updateData.takenBy = changedBy;
       updateData.takenByUid = currentUser.uid;
       updateData.takenAt = serverTimestamp();
+    }
+
+    // Si passage à Résolu ou Fermé → enregistrer la date de fermeture
+    if (newStatus === 'Résolu' || newStatus === 'Fermé') {
+      updateData.closedAt = serverTimestamp();
+      updateData.closedBy = changedBy;
+      updateData.closedByUid = currentUser.uid;
     }
 
     await updateDoc(ticketRef, updateData);

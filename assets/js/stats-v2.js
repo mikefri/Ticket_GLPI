@@ -68,11 +68,16 @@ function createTicketRow(ticket, columnType) {
   } else {
     const techDiv = document.createElement('div');
     techDiv.className = 'ticket-tech';
+    
+    // Utiliser takenBy en priorité, puis assignedTo
+    const techName = ticket.takenBy || ticket.assignedTo || '–';
+    const techId = ticket.takenByUid || ticket.assignedToId || '';
+    
     techDiv.innerHTML = `
-      ${formatName(ticket.assignedTo || '–')}
-      ${ticket.assignedToId ? `<span class="ticket-tech-id">(${ticket.assignedToId})</span>` : ''}
+      ${formatName(techName)}
+      ${techId ? `<span class="ticket-tech-id">(${techId.substring(0, 5)})</span>` : ''}
     `;
-    techDiv.title = ticket.assignedTo || '';
+    techDiv.title = techName;
     row.appendChild(techDiv);
   }
   
@@ -125,14 +130,14 @@ async function loadTickets() {
       const ticket = { id: doc.id, ...data };
       const status = ticket.status;
       
-      console.log(`[stats-v2] Ticket ${doc.id}: status="${status}"`);
+      console.log(`[stats-v2] Ticket ${doc.id}: status="${status}", takenBy="${ticket.takenBy || 'N/A'}"`);
       
       // Mapping flexible des statuts
       if (status === 'Ouvert') {
         columns.new.push(ticket);
       } else if (status === 'En cours') {
-        // Différencier selon assignation ou non
-        if (ticket.assignedTo) {
+        // Différencier selon assignation ou prise en charge
+        if (ticket.takenBy || ticket.assignedTo) {
           columns.assigned.push(ticket);
         } else {
           columns.new.push(ticket);

@@ -26,6 +26,8 @@ const inputSearch  = document.getElementById('search');
 let data = [];
 let pendingDeleteId = null;
 let modalDelete = null;
+let modalEdit = null;
+let currentEditId = null;
 
 // ────────────────────────────────────────────────
 // Utils
@@ -134,6 +136,7 @@ function renderItem(d) {
   const authorName = t.userName || t.displayName || (t.email ? t.email.split('@')[0] : t.createdBy) || 'Inconnu';
   const meta = `Par ${authorName} • ${formatDate(t.createdAt)}`;
 
+  const editBtn = window.__isAdmin ? `<button type="button" class="btn btn-outline-primary btn-sm" title="Modifier" data-edit="${id}"><i class="bi bi-pencil"></i></button>` : '';
   const deleteBtn = window.__isAdmin ? `<button type="button" class="btn btn-outline-danger btn-sm" title="Supprimer" data-delete="${id}"><i class="bi bi-trash"></i></button>` : '';
 
   const historyBtn = `<button type="button" class="btn btn-link btn-sm p-0 mt-2 text-decoration-none" data-history="${id}" title="Voir l'historique"><i class="bi bi-clock-history me-1"></i> Historique</button>`;
@@ -152,6 +155,7 @@ function renderItem(d) {
           <select class="form-select form-select-sm" data-id="${id}" data-current="${t.status}">
             ${['Ouvert','En cours','En attente','Résolu','Fermé'].map(s => `<option ${s===t.status?'selected':''}>${s}</option>`).join('')}
           </select>
+          ${editBtn}
           ${deleteBtn}
         </div>
       </div>
@@ -274,6 +278,152 @@ elList.addEventListener('change', async (e) => {
   }
 });
 
+// Édition
+elList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-edit]');
+  if (!btn) return;
+  
+  currentEditId = btn.getAttribute('data-edit');
+  
+  try {
+    const ticketRef = doc(db, 'tickets', currentEditId);
+    const ticketSnap = await getDoc(ticketRef);
+    
+    if (!ticketSnap.exists()) {
+      toast('Ticket introuvable');
+      return;
+    }
+    
+    const t = ticketSnap.data();
+    
+    // Remplir le formulaire
+    document.getElementById('edit-title').value = t.title || '';
+    document.getElementById('edit-description').value = t.description || '';
+    document.getElementById('edit-category').value = t.category || '';
+    document.getElementById('edit-type').value = t.type || '';
+    document.getElementById('edit-priority').value = t.priority || 'Moyenne';
+    
+    // Afficher la modal
+    if (!modalEdit) modalEdit = new bootstrap.Modal(document.getElementById('editModal'));
+    modalEdit.show();
+  } catch (err) {
+    console.error('[load ticket for edit] error', err);
+    toast('Erreur chargement du ticket');
+  }
+});
+
+// Sauvegarde de l'édition
+document.getElementById('btn-save-edit')?.addEventListener('click', async () => {
+  if (!currentEditId) return;
+  
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  
+  if (!currentUser) {
+    toast('Utilisateur non connecté');
+    return;
+  }
+  
+  const newTitle = document.getElementById('edit-title').value.trim();
+  const newDescription = document.getElementById('edit-description').value.trim();
+  const newCategory = document.getElementById('edit-category').value;
+  const newType = document.getElementById('edit-type').value;
+  const newPriority = document.getElementById('edit-priority').value;
+  
+  if (!newTitle || !newDescription) {
+    toast('Titre et description requis');
+    return;
+  }
+  
+  try {
+    const ticketRef = doc(db, 'tickets', currentEditId);
+    const ticketSnap = await getDoc(ticketRef);
+    const oldData = ticketSnap.data();
+    
+    const changedBy = await getDisplayName(currentUser, currentUser.uid);
+    
+    // Détecter les changements et créer des entrées d'historique
+    const changes = [];
+    
+    if (oldData.title !== newTitle) {
+      changes.push({
+        field: 'title',
+        oldValue: oldData.title,
+        newValue: newTitle,
+        changedBy,
+        changedByUid: currentUser.uid,
+        changedAt: serverTimestamp()
+      });
+    }
+    
+    if (oldData.description !== newDescription) {
+      changes.push({
+        field: 'description',
+        oldValue: oldData.description,
+        newValue: newDescription,
+        changedBy,
+        changedByUid: currentUser.uid,
+        changedAt: serverTimestamp()
+      });
+    }
+    
+    if (oldData.category !== newCategory) {
+      changes.push({
+        field: 'category',
+        oldValue: oldData.category,
+        newValue: newCategory,
+        changedBy,
+        changedByUid: currentUser.uid,
+        changedAt: serverTimestamp()
+      });
+    }
+    
+    if (oldData.type !== newType) {
+      changes.push({
+        field: 'type',
+        oldValue: oldData.type,
+        newValue: newType,
+        changedBy,
+        changedByUid: currentUser.uid,
+        changedAt: serverTimestamp()
+      });
+    }
+    
+    if (oldData.priority !== newPriority) {
+      changes.push({
+        field: 'priority',
+        oldValue: oldData.priority,
+        newValue: newPriority,
+        changedBy,
+        changedByUid: currentUser.uid,
+        changedAt: serverTimestamp()
+      });
+    }
+    
+    // Mettre à jour le ticket
+    await updateDoc(ticketRef, {
+      title: newTitle,
+      description: newDescription,
+      category: newCategory,
+      type: newType,
+      priority: newPriority,
+      updatedAt: serverTimestamp()
+    });
+    
+    // Ajouter les entrées d'historique
+    for (const change of changes) {
+      await addDoc(collection(ticketRef, 'history'), change);
+    }
+    
+    toast('Ticket modifié avec succès');
+    modalEdit?.hide();
+    currentEditId = null;
+  } catch (err) {
+    console.error('[save edit] error', err);
+    toast('Échec de la modification');
+  }
+});
+
 // Suppression
 elList.addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-delete]');
@@ -325,17 +475,29 @@ elList.addEventListener('click', async (e) => {
       const h = ds.data();
       const date = h.changedAt ? formatDate(h.changedAt.toDate ? h.changedAt.toDate() : new Date(h.changedAt)) : '?';
 
+      // Affichage adapté selon le type de champ
+      let changeDisplay = '';
+      if (h.field === 'title' || h.field === 'description') {
+        changeDisplay = `
+          <div class="mt-1">
+            <small class="text-muted">Champ modifié : <strong>${h.field === 'title' ? 'Titre' : 'Description'}</strong></small>
+          </div>`;
+      } else {
+        changeDisplay = `
+          <div class="mt-1">
+            ${h.oldValue ? `<span class="badge bg-secondary me-2">${h.oldValue}</span>` : '(nouveau)'}
+            <i class="bi bi-arrow-right mx-2"></i>
+            <span class="badge bg-primary">${h.newValue}</span>
+          </div>`;
+      }
+
       html += `
         <div class="list-group-item">
           <div class="d-flex justify-content-between">
             <strong>${h.changedBy || 'Admin'}</strong>
             <small class="text-muted">${date}</small>
           </div>
-          <div class="mt-1">
-            ${h.oldValue ? `<span class="badge bg-secondary me-2">${h.oldValue}</span>` : '(nouveau)'}
-            <i class="bi bi-arrow-right mx-2"></i>
-            <span class="badge bg-primary">${h.newValue}</span>
-          </div>
+          ${changeDisplay}
         </div>`;
     });
 

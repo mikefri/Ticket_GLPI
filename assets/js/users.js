@@ -1,5 +1,5 @@
 // ============================================================
-// users.js — Création utilisateur + RECONNEXION AUTO ADMIN
+// users.js — Création utilisateur + RECONNEXION AUTO ADMIN + SUPPRESSION
 // ============================================================
 
 import './app.js';
@@ -54,8 +54,11 @@ function row(user, isAdmin) {
       <td class="text-center"><span class="badge ${isAdmin ? 'text-bg-warning text-dark' : 'text-bg-secondary'}">${isAdmin ? 'Admin' : '—'}</span></td>
       <td class="text-center"><span class="badge ${canCreate ? 'text-bg-success' : 'text-bg-secondary'}">${canCreate ? 'Autorisé' : 'Bloqué'}</span></td>
       <td class="text-end">
-        <button class="btn btn-sm ${isAdmin ? 'btn-outline-danger' : 'btn-outline-primary'} btn-toggle-admin" data-uid="${esc(user.uid)}">
+        <button class="btn btn-sm ${isAdmin ? 'btn-outline-danger' : 'btn-outline-primary'} btn-toggle-admin" data-uid="${esc(user.uid)}" title="Changer le rôle admin">
           ${isAdmin ? 'Retirer admin' : 'Promouvoir admin'}
+        </button>
+        <button class="btn btn-sm btn-outline-danger btn-delete-user" data-uid="${esc(user.uid)}" data-email="${esc(user.email)}" title="Supprimer cet utilisateur">
+          <i class="bi bi-trash"></i>
         </button>
       </td>
     </tr>`;
@@ -110,29 +113,24 @@ async function loadPage(direction = 'first') {
   btnNext.disabled = snap.size < PAGE_SIZE;
 }
 
-// Toggle admin
+// ============================================================
+// Toggle admin (promouvoir / retirer)
+// ============================================================
 document.addEventListener('click', async e => {
   const btn = e.target.closest('.btn-toggle-admin');
   if (!btn) return;
 
   const uid = btn.dataset.uid;
-  const isAdmin = adminsSet.has(uid); // Vérifie si l'utilisateur est déjà admin
+  const isAdmin = adminsSet.has(uid);
 
-  btn.disabled = true; // Désactive le bouton pendant le chargement
+  btn.disabled = true;
   try {
     if (isAdmin) {
-      // ============================================================
-      // CAS 1 : IL EST ADMIN -> ON LE RETIRE
-      // ============================================================
-      // deleteDoc supprime le document dans la collection 'admins'.
-      // Peu importe qu'il y ait des champs displayName ou email dedans,
-      // tout le document disparaît.
+      // IL EST ADMIN -> ON LE RETIRE
       await deleteDoc(doc(db, 'admins', uid));
       toast('Rôle admin retiré');
     } else {
-      // ============================================================
-      // CAS 2 : IL N'EST PAS ADMIN -> ON LE PEMOTE (Votre demande précédente)
-      // ============================================================
+      // IL N'EST PAS ADMIN -> ON LE PROMEUT
       const userSnap = await getDoc(doc(db, 'users', uid));
       const userData = userSnap.exists() ? userSnap.data() : {};
 
@@ -144,8 +142,7 @@ document.addEventListener('click', async e => {
       toast('Promu admin avec succès');
     }
     
-    // On recharge la liste pour mettre à jour les boutons et badges
-    await loadPage('first'); 
+    await loadPage('first');
 
   } catch (err) {
     console.error(err);
@@ -155,9 +152,54 @@ document.addEventListener('click', async e => {
   }
 });
 
+// ============================================================
+// Suppression d'utilisateur
+// ============================================================
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('.btn-delete-user');
+  if (!btn) return;
+
+  const uid = btn.dataset.uid;
+  const email = btn.dataset.email;
+
+  // Confirmation avant suppression
+  const confirmed = confirm(
+    `Êtes-vous sûr de vouloir supprimer l'utilisateur "${email}" ?\n\nCette action est irréversible.`
+  );
+  if (!confirmed) return;
+
+  btn.disabled = true;
+  try {
+    // Supprime le document utilisateur
+    await deleteDoc(doc(db, 'users', uid));
+    
+    // Supprime le rôle admin s'il y était
+    try {
+      await deleteDoc(doc(db, 'admins', uid));
+    } catch (e) {
+      // L'utilisateur n'était peut-être pas admin, on continue
+      console.log('[users] user was not admin, continuing');
+    }
+    
+    toast(`Utilisateur "${email}" supprimé`);
+    await loadPage('first');
+    
+  } catch (err) {
+    console.error('[users] delete user error:', err);
+    toast('Erreur lors de la suppression (vérifier les droits Firestore)');
+    btn.disabled = false;
+  }
+});
+
+// ============================================================
+// Pagination
+// ============================================================
 btnNext?.addEventListener('click', () => loadPage('next'));
 btnPrev?.addEventListener('click', () => loadPage('prev'));
 
+// ============================================================
+// Recherche client
+// ============================================================
 searchInput?.addEventListener('input', () => {
   const term = searchInput.value.toLowerCase();
   [...tbody.querySelectorAll('tr')].forEach(tr => {
@@ -165,7 +207,9 @@ searchInput?.addEventListener('input', () => {
   });
 });
 
+// ============================================================
 // Modal + création + RECONNEXION AUTO ADMIN
+// ============================================================
 let modalCreate;
 btnOpenCreate?.addEventListener('click', () => {
   if (!modalCreate) modalCreate = new bootstrap.Modal(document.getElementById('modal-create-user'));
@@ -175,8 +219,6 @@ btnOpenCreate?.addEventListener('click', () => {
   const currentUser = auth.currentUser;
   if (currentUser && currentUser.email) {
     sessionStorage.setItem('adminEmail', currentUser.email);
-    // Attention : on ne stocke PAS le mot de passe ici pour sécurité
-    // On va demander à l'utilisateur de le saisir une fois (voir plus bas)
   }
 
   cuEmail.value = '';
@@ -210,14 +252,14 @@ formCreate?.addEventListener('submit', async e => {
   const auth = getAuth();
 
   try {
-    // Sauvegarde l'email admin (déjà fait à l'ouverture)
+    // Récupère l'email admin
     const adminEmail = sessionStorage.getItem('adminEmail');
     if (!adminEmail) {
       toast('Impossible de récupérer vos identifiants admin. Reconnectez-vous.');
       return;
     }
 
-    // Demande le mot de passe admin (sécurité : on ne le stocke pas avant)
+    // Demande le mot de passe admin
     const adminPassword = prompt("Pour des raisons de sécurité, veuillez ressaisir votre mot de passe administrateur :");
     if (!adminPassword) {
       toast('Mot de passe admin annulé');
@@ -270,7 +312,9 @@ formCreate?.addEventListener('submit', async e => {
   }
 });
 
-// Init
+// ============================================================
+// Initialisation
+// ============================================================
 (async () => {
   const user = await requireAuth(true);
   if (!user) return;

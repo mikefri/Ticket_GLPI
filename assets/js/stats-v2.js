@@ -216,32 +216,45 @@ async function loadClosedStats() {
     // Cette année
     const yearStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
     
-    // Total de tickets fermés
-    const qTotal = query(ticketsRef, where('status', '==', 'Fermé'));
-    const snapTotal = await getDocs(qTotal);
+    // Charger TOUS les tickets pour filtrer ensuite
+    const qAll = query(ticketsRef);
+    const snapAll = await getDocs(qAll);
     
-    console.log('[stats-v2] Total tickets fermés:', snapTotal.size);
+    console.log('[stats-v2] Total de tous les tickets:', snapAll.size);
     
-    // Si aucun ticket fermé n'a de closedAt, on compte juste par status
-    let countToday = 0, countWeek = 0, countMonth = 0, countYear = 0;
+    let countToday = 0, countWeek = 0, countMonth = 0, countYear = 0, countTotal = 0;
     
-    snapTotal.forEach(doc => {
+    snapAll.forEach(doc => {
       const data = doc.data();
+      const status = data.status;
+      
+      // Considérer comme "fermé" : Résolu OU Fermé
+      if (status !== 'Résolu' && status !== 'Fermé') {
+        return; // Ignorer les tickets non fermés
+      }
+      
+      countTotal++; // Compter dans le total
+      
+      // Déterminer la date de fermeture
+      let closeDate = null;
+      
       if (data.closedAt) {
-        const closedDate = data.closedAt.toDate ? data.closedAt.toDate() : new Date(data.closedAt);
-        
-        if (closedDate >= todayStart) countToday++;
-        if (closedDate >= weekStart) countWeek++;
-        if (closedDate >= monthStart) countMonth++;
-        if (closedDate >= yearStart) countYear++;
+        closeDate = data.closedAt.toDate ? data.closedAt.toDate() : new Date(data.closedAt);
       } else if (data.updatedAt) {
-        // Fallback sur updatedAt si closedAt n'existe pas
-        const updatedDate = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+        // Fallback sur updatedAt
+        closeDate = data.updatedAt.toDate ? data.updatedAt.toDate() : new Date(data.updatedAt);
+      } else if (data.createdAt) {
+        // Dernier fallback
+        closeDate = data.createdAt.toDate ? data.createdAt.toDate() : new Date(data.createdAt);
+      }
+      
+      if (closeDate) {
+        console.log(`[stats-v2] Ticket fermé ${doc.id}: status="${status}", date=${closeDate.toISOString()}`);
         
-        if (updatedDate >= todayStart) countToday++;
-        if (updatedDate >= weekStart) countWeek++;
-        if (updatedDate >= monthStart) countMonth++;
-        if (updatedDate >= yearStart) countYear++;
+        if (closeDate >= todayStart) countToday++;
+        if (closeDate >= weekStart) countWeek++;
+        if (closeDate >= monthStart) countMonth++;
+        if (closeDate >= yearStart) countYear++;
       }
     });
     
@@ -250,9 +263,16 @@ async function loadClosedStats() {
     document.getElementById('footer-closed-week').textContent = countWeek;
     document.getElementById('footer-closed-month').textContent = countMonth;
     document.getElementById('footer-closed-year').textContent = countYear;
-    document.getElementById('footer-closed-total').textContent = snapTotal.size;
+    document.getElementById('footer-closed-total').textContent = countTotal;
     
-    console.log('[stats-v2] Stats fermeture:', { countToday, countWeek, countMonth, countYear, total: snapTotal.size });
+    console.log('[stats-v2] Stats fermeture:', { 
+      today: countToday, 
+      week: countWeek, 
+      month: countMonth, 
+      year: countYear, 
+      total: countTotal,
+      todayStart: todayStart.toISOString()
+    });
     
   } catch (error) {
     console.error('[stats-v2] Erreur stats fermeture:', error);

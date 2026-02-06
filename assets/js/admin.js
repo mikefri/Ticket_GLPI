@@ -54,7 +54,20 @@ async function getDisplayName(user = null, uid = null) {
     return user.displayName.trim();
   }
 
-  // 2. Firestore /users/{uid}
+  // 2. Firestore /admins/{uid} (AJOUT)
+  try {
+    const adminSnap = await getDoc(doc(db, 'admins', targetUid));
+    if (adminSnap.exists()) {
+      const data = adminSnap.data();
+      if (data.displayName?.trim()) {
+        return data.displayName.trim();
+      }
+    }
+  } catch (err) {
+    console.warn('[getDisplayName] Admins lookup error for', targetUid, err);
+  }
+
+  // 3. Firestore /users/{uid} (fallback)
   try {
     const userSnap = await getDoc(doc(db, 'users', targetUid));
     if (userSnap.exists()) {
@@ -67,7 +80,7 @@ async function getDisplayName(user = null, uid = null) {
     console.warn('[getDisplayName] Firestore error for', targetUid, err);
   }
 
-  // 3. Fallback email → prenom.nom
+  // 4. Fallback email → prenom.nom
   if (user?.email) {
     return user.email.split('@')[0];
   }

@@ -229,7 +229,7 @@ async function loadClosedStats() {
       const status = data.status;
       
       // Considérer comme "fermé" : Résolu OU Fermé
-      if (status !== 'Résolu' && status !== 'Fermé') {
+      if (status !== 'Fermé') {
         return; // Ignorer les tickets non fermés
       }
       

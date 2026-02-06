@@ -192,8 +192,10 @@ function refreshList() {
         } else {
           // Sinon on utilise l'admin connecté
           const currentUser = window.__currentUser;
-          const name = await getDisplayName(currentUser, currentUser?.uid);
-          strongEl.textContent = name;
+          if (currentUser) {
+            const name = await getDisplayName(currentUser, currentUser.uid);
+            strongEl.textContent = name;
+          }
         }
       }
     }
@@ -218,7 +220,13 @@ elList.addEventListener('change', async (e) => {
   if (newStatus === oldStatus) return;
 
   const currentUser = window.__currentUser;
-  const changedBy = await getDisplayName(currentUser, currentUser?.uid);
+  if (!currentUser) {
+    toast('Utilisateur non connecté');
+    sel.value = oldStatus;
+    return;
+  }
+
+  const changedBy = await getDisplayName(currentUser, currentUser.uid);
 
   try {
     const ticketRef = doc(db, 'tickets', id);

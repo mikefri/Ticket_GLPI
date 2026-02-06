@@ -1,170 +1,286 @@
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Utilisateurs & Rôles — Administration</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/styles.css">
-</head>
-<body>
+// ============================================================
+// users.js — Création utilisateur + RECONNEXION AUTO ADMIN
+// ============================================================
 
-<nav class="navbar navbar-expand-lg sncftop">
-  <div class="container">
-    <!-- Logo + titre -->
-    <a class="navbar-brand d-flex align-items-center" href="index.html">
-      <img src="assets/img/GLPI.png" alt="Logo" class="brand-logo me-2" />
-      <span class="fw-semibold">Centre d’assistance</span>
-    </a>
+import './app.js';
+import { db } from './firebase-init.js';
+import { requireAuth, toast } from './app.js';
 
-    <!-- Burger mobile -->
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain"
-            aria-controls="navbarsMain" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon" style="filter: invert(1);"></span>
-    </button>
+import {
+  collection, query, orderBy, limit, limitToLast, startAfter, endBefore,
+  getDocs, getDoc, setDoc, deleteDoc, doc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    <!-- Contenu -->
-    <div class="collapse navbar-collapse" id="navbarsMain">
-      <!-- Liens principaux (centrés) -->
-      <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
-        <li class="nav-item">
-          <a class="nav-link" href="index.html">Demander une assistance</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="tickets.html">Mes demandes</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="profil.html">Mon profil</a>
-        </li>
-        <!-- Liens admin (masqués par défaut, JS les affiche) -->
-        <li class="nav-item d-none" id="nav-admin">
-          <a class="nav-link" href="admin.html">Administration</a>
-        </li>
-        <li class="nav-item d-none" id="nav-users">
-          <a class="nav-link" href="users.html">Utilisateurs & Rôles</a>
-        </li>
-        <li class="nav-item d-none" id="nav-stats">
-          <a class="nav-link" href="stats.html">Statistiques</a>
-        </li>
-      </ul>
+import {
+  getAuth, createUserWithEmailAndPassword, updateProfile, signInWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-      <!-- Zone droite : connexion / logout / avatar / badge / nom -->
-      <div class="d-flex align-items-center gap-3 ms-lg-3">
-        <!-- Nom utilisateur (quand connecté) -->
-        <span class="navbar-text small d-none" id="user-display">
-          <!-- JS remplira : Bonjour Michael F -->
-        </span>
+// DOM
+const tbody         = document.getElementById('users-tbody');
+const searchInput   = document.getElementById('search');
+const btnPrev       = document.getElementById('btn-prev');
+const btnNext       = document.getElementById('btn-next');
+const pageInfo      = document.getElementById('page-info');
+const btnOpenCreate = document.getElementById('btn-open-create');
+const formCreate    = document.getElementById('form-create-user');
+const cuEmail       = document.getElementById('cu-email');
+const cuName        = document.getElementById('cu-displayName');
+const cuPassword    = document.getElementById('cu-password');
+const cuConfirm     = document.getElementById('cu-password-confirm');
+const cuMakeAdmin   = document.getElementById('cu-makeAdmin');
+const cuCanCreate   = document.getElementById('cu-canCreate');
+const cuResult      = document.getElementById('cu-result');
 
-        <!-- Badge Admin -->
-        <span id="badge-admin" class="badge rounded-pill bg-warning text-dark d-none">
-          <i class="bi bi-shield-lock-fill me-1"></i>Admin
-        </span>
+const PAGE_SIZE = 20;
+let lastDoc = null;
+let firstDoc = null;
+let history = [];
+let adminsSet = new Set();
 
-        <!-- Avatar -->
-        <div id="avatar" class="avatar-circle d-none"></div>
+// Helpers
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 
-        <!-- Boutons connexion/déconnexion -->
-        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
-        <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
-      </div>
-    </div>
-  </div>
-</nav>
+function row(user, isAdmin) {
+  const name = esc(user.displayName || '—');
+  const email = esc(user.email || '—');
+  const canCreate = user.canCreateTickets !== false;
+  const uidText = esc(user.uid || '');
+  return `
+    <tr>
+      <td><div class="fw-semibold">${name}</div><div class="small text-muted">${uidText}</div></td>
+      <td>${email}</td>
+      <td class="text-center"><span class="badge ${isAdmin ? 'text-bg-warning text-dark' : 'text-bg-secondary'}">${isAdmin ? 'Admin' : '—'}</span></td>
+      <td class="text-center"><span class="badge ${canCreate ? 'text-bg-success' : 'text-bg-secondary'}">${canCreate ? 'Autorisé' : 'Bloqué'}</span></td>
+      <td class="text-end">
+        <button class="btn btn-sm ${isAdmin ? 'btn-outline-danger' : 'btn-outline-primary'} btn-toggle-admin" data-uid="${esc(user.uid)}">
+          ${isAdmin ? 'Retirer admin' : 'Promouvoir admin'}
+        </button>
+      </td>
+    </tr>`;
+}
 
-<main class="container my-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Utilisateurs</h4>
-    <div class="d-flex align-items-center gap-2">
-      <input type="search" id="search" class="form-control form-control-sm" style="width:260px" placeholder="Rechercher (email, nom)…">
-      <button class="btn btn-primary btn-sm" id="btn-open-create">
-        <i class="bi bi-person-plus"></i> Créer un utilisateur
-      </button>
-    </div>
-  </div>
+async function loadAdmins() {
+  adminsSet = new Set();
+  const snap = await getDocs(collection(db, 'admins'));
+  snap.forEach(d => adminsSet.add(d.id));
+}
 
-  <div class="table-responsive">
-    <table class="table align-middle">
-      <thead>
-        <tr>
-          <th style="min-width:220px">Utilisateur</th>
-          <th>Email</th>
-          <th class="text-center">Admin</th>
-          <th class="text-center">Création tickets</th>
-          <th class="text-end" style="min-width:180px">Actions</th>
-        </tr>
-      </thead>
-      <tbody id="users-tbody"></tbody>
-    </table>
-  </div>
+async function loadPage(direction = 'first') {
+  await loadAdmins();
+  const base = query(collection(db, 'users'), orderBy('email'));
+  let q;
 
-  <div class="d-flex justify-content-between align-items-center mt-2">
-    <button class="btn btn-outline-secondary btn-sm" id="btn-prev" disabled>Précédent</button>
-    <div class="text-muted small" id="page-info">—</div>
-    <button class="btn btn-outline-secondary btn-sm" id="btn-next" disabled>Suivant</button>
-  </div>
-</main>
+  if (direction === 'first') q = query(base, limit(PAGE_SIZE));
+  else if (direction === 'next' && lastDoc) q = query(base, startAfter(lastDoc), limit(PAGE_SIZE));
+  else if (direction === 'prev' && history.length > 1 && firstDoc) q = query(base, endBefore(firstDoc), limitToLast(PAGE_SIZE));
+  else return;
 
-<footer class="text-center py-4">
-  <small>© 2026 • Centre d’assistance — Méthodes Logistiques</small>
-</footer>
+  const snap = await getDocs(q);
+  tbody.innerHTML = '';
 
-<div class="toast-container position-fixed bottom-0 end-0 p-3">
-  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
-    <div class="toast-header">
-      <strong class="me-auto">Utilisateurs</strong>
-      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Fermer"></button>
-    </div>
-    <div id="toast-body" class="toast-body">Message…</div>
-  </div>
-</div>
+  if (snap.empty) {
+    pageInfo.textContent = 'Aucun utilisateur';
+    btnNext.disabled = true;
+    btnPrev.disabled = history.length <= 1;
+    return;
+  }
 
-<div class="modal fade" id="modal-create-user" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <form class="modal-content" id="form-create-user">
-      <div class="modal-header">
-        <h5 class="modal-title">Créer un utilisateur</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <label class="form-label">Email *</label>
-          <input type="email" class="form-control" id="cu-email" required autocomplete="off">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Nom affiché *</label>
-          <input type="text" class="form-control" id="cu-displayName" required placeholder="Prénom Nom">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Mot de passe temporaire *</label>
-          <input type="password" class="form-control" id="cu-password" required minlength="8" autocomplete="new-password">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Confirmer le mot de passe</label>
-          <input type="password" class="form-control" id="cu-password-confirm" required>
-        </div>
-        <div class="form-check mb-2">
-          <input class="form-check-input" type="checkbox" id="cu-makeAdmin">
-          <label class="form-check-label" for="cu-makeAdmin">Promouvoir admin</label>
-        </div>
-        <div class="form-check mb-2">
-          <input class="form-check-input" type="checkbox" id="cu-canCreate" checked>
-          <label class="form-check-label" for="cu-canCreate">Autoriser la création de tickets</label>
-        </div>
-        <div class="alert alert-warning small mt-3">
-          <strong>Important :</strong> Notez le mot de passe et transmettez-le à l’utilisateur de façon sécurisée. Il pourra le changer via « Mot de passe oublié ».
-        </div>
-        <div id="cu-result" class="small text-muted d-none"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Annuler</button>
-        <button class="btn btn-primary" type="submit" id="cu-submit">Créer l’utilisateur</button>
-      </div>
-    </form>
-  </div>
-</div>
+  const rows = [];
+  snap.forEach(d => {
+    const u = d.data();
+    u.uid = d.id;
+    rows.push(row(u, adminsSet.has(d.id)));
+  });
+  tbody.innerHTML = rows.join('');
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script type="module" src="assets/js/users.js"></script>
-</body>
-</html>
+  firstDoc = snap.docs[0];
+  lastDoc = snap.docs[snap.docs.length - 1];
+
+  if (direction === 'first') history = [firstDoc];
+  else if (direction === 'next') history.push(firstDoc);
+  else if (direction === 'prev') {
+    history.pop();
+    firstDoc = history[history.length - 1];
+  }
+
+  pageInfo.textContent = `Affichés : ${snap.size}`;
+  btnPrev.disabled = history.length <= 1;
+  btnNext.disabled = snap.size < PAGE_SIZE;
+}
+
+// Toggle admin
+document.addEventListener('click', async e => {
+  const btn = e.target.closest('.btn-toggle-admin');
+  if (!btn) return;
+
+  const uid = btn.dataset.uid;
+  const isAdmin = adminsSet.has(uid); // Vérifie si l'utilisateur est déjà admin
+
+  btn.disabled = true; // Désactive le bouton pendant le chargement
+  try {
+    if (isAdmin) {
+      // ============================================================
+      // CAS 1 : IL EST ADMIN -> ON LE RETIRE
+      // ============================================================
+      // deleteDoc supprime le document dans la collection 'admins'.
+      // Peu importe qu'il y ait des champs displayName ou email dedans,
+      // tout le document disparaît.
+      await deleteDoc(doc(db, 'admins', uid));
+      toast('Rôle admin retiré');
+    } else {
+      // ============================================================
+      // CAS 2 : IL N'EST PAS ADMIN -> ON LE PEMOTE (Votre demande précédente)
+      // ============================================================
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      const userData = userSnap.exists() ? userSnap.data() : {};
+
+      await setDoc(doc(db, 'admins', uid), {
+        email: userData.email || null,
+        displayName: userData.displayName || null,
+        promotedAt: serverTimestamp()
+      });
+      toast('Promu admin avec succès');
+    }
+    
+    // On recharge la liste pour mettre à jour les boutons et badges
+    await loadPage('first'); 
+
+  } catch (err) {
+    console.error(err);
+    toast('Échec modification rôle');
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+btnNext?.addEventListener('click', () => loadPage('next'));
+btnPrev?.addEventListener('click', () => loadPage('prev'));
+
+searchInput?.addEventListener('input', () => {
+  const term = searchInput.value.toLowerCase();
+  [...tbody.querySelectorAll('tr')].forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(term) ? '' : 'none';
+  });
+});
+
+// Modal + création + RECONNEXION AUTO ADMIN
+let modalCreate;
+btnOpenCreate?.addEventListener('click', () => {
+  if (!modalCreate) modalCreate = new bootstrap.Modal(document.getElementById('modal-create-user'));
+
+  // Sauvegarde temporaire des infos admin AVANT ouverture modal
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+  if (currentUser && currentUser.email) {
+    sessionStorage.setItem('adminEmail', currentUser.email);
+    // Attention : on ne stocke PAS le mot de passe ici pour sécurité
+    // On va demander à l'utilisateur de le saisir une fois (voir plus bas)
+  }
+
+  cuEmail.value = '';
+  cuName.value = '';
+  cuPassword.value = '';
+  cuConfirm.value = '';
+  cuMakeAdmin.checked = false;
+  cuCanCreate.checked = true;
+  cuResult.classList.add('d-none');
+  modalCreate.show();
+});
+
+formCreate?.addEventListener('submit', async e => {
+  e.preventDefault();
+
+  const email       = cuEmail.value.trim();
+  const displayName = cuName.value.trim();
+  const password    = cuPassword.value;
+  const confirmPw   = cuConfirm.value;
+  const makeAdmin   = cuMakeAdmin.checked;
+  const canCreate   = cuCanCreate.checked;
+
+  if (!email || !displayName || !password || password !== confirmPw || password.length < 8) {
+    toast('Vérifiez les champs (mot de passe ≥ 8 et confirmation identique)');
+    return;
+  }
+
+  const submitBtn = document.getElementById('cu-submit');
+  submitBtn.disabled = true;
+
+  const auth = getAuth();
+
+  try {
+    // Sauvegarde l'email admin (déjà fait à l'ouverture)
+    const adminEmail = sessionStorage.getItem('adminEmail');
+    if (!adminEmail) {
+      toast('Impossible de récupérer vos identifiants admin. Reconnectez-vous.');
+      return;
+    }
+
+    // Demande le mot de passe admin (sécurité : on ne le stocke pas avant)
+    const adminPassword = prompt("Pour des raisons de sécurité, veuillez ressaisir votre mot de passe administrateur :");
+    if (!adminPassword) {
+      toast('Mot de passe admin annulé');
+      return;
+    }
+
+    // 1. Créer le nouvel utilisateur
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const newUser = cred.user;
+
+    await updateProfile(newUser, { displayName });
+
+    await setDoc(doc(db, 'users', newUser.uid), {
+      uid: newUser.uid,
+      email,
+      displayName,
+      canCreateTickets: canCreate,
+      createdAt: serverTimestamp(),
+      createdBy: (await requireAuth())?.uid || null
+    });
+
+    if (makeAdmin) {
+      await setDoc(doc(db, 'admins', newUser.uid), {});
+    }
+
+    // 2. Déconnecter le nouveau user
+    await signOut(auth);
+
+    // 3. Reconnecter l'admin automatiquement
+    await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+
+    // Nettoyage
+    sessionStorage.removeItem('adminEmail');
+
+    toast('Utilisateur créé et vous êtes reconnecté en admin !');
+    cuResult.innerHTML = `Compte créé : ${esc(email)} (${esc(displayName)})`;
+    cuResult.classList.remove('d-none');
+
+    await loadPage('first');
+    modalCreate.hide();
+
+  } catch (err) {
+    console.error('[createUser]', err);
+    let msg = 'Erreur création';
+    if (err.code === 'auth/email-already-in-use') msg = 'Email déjà utilisé';
+    if (err.code === 'auth/wrong-password') msg = 'Mot de passe admin incorrect';
+    toast(msg);
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+// Init
+(async () => {
+  const user = await requireAuth(true);
+  if (!user) return;
+
+  const adminSnap = await getDoc(doc(db, 'admins', user.uid));
+  if (!adminSnap.exists()) {
+    toast('Accès réservé aux admins');
+    setTimeout(() => location.href = 'tickets.html', 800);
+    return;
+  }
+
+  await loadPage('first');
+})();

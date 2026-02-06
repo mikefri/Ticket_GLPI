@@ -10,6 +10,8 @@ import {
   getDocs, writeBatch
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
 // ────────────────────────────────────────────────
 // DOM
 // ────────────────────────────────────────────────
@@ -191,7 +193,8 @@ function refreshList() {
           strongEl.textContent = name;
         } else {
           // Sinon on utilise l'admin connecté
-          const currentUser = window.__currentUser;
+          const auth = getAuth();
+          const currentUser = auth.currentUser;
           if (currentUser) {
             const name = await getDisplayName(currentUser, currentUser.uid);
             strongEl.textContent = name;
@@ -219,7 +222,10 @@ elList.addEventListener('change', async (e) => {
 
   if (newStatus === oldStatus) return;
 
-  const currentUser = window.__currentUser;
+  // Récupérer l'utilisateur depuis Firebase Auth
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
+
   if (!currentUser) {
     toast('Utilisateur non connecté');
     sel.value = oldStatus;

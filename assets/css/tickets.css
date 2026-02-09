@@ -1,0 +1,326 @@
+/* assets/css/tickets.css */
+/* Styles pour la page de liste des tickets */
+
+/* ===== EN-TÊTE DE PAGE ===== */
+.page-header {
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e9ecef;
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  color: #212529;
+  font-weight: 600;
+}
+
+/* ===== BARRE DE FILTRES ===== */
+.filters-bar {
+  background: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.filters-bar .form-label {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+
+.filters-bar .form-select-sm {
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.filters-bar .form-select-sm:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+}
+
+/* ===== LISTE DES TICKETS ===== */
+.tickets-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1.5rem;
+}
+
+/* ===== CARTE DE TICKET ===== */
+.ticket-card {
+  position: relative;
+  display: block;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  color: inherit;
+}
+
+.ticket-card:hover {
+  transform: translateY(-4px);
+}
+
+.ticket-card .card {
+  position: relative;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.ticket-card:hover .card {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.ticket-card .card-body {
+  padding: 1.5rem;
+  min-height: 280px;
+}
+
+/* ===== CONTENU DE LA CARTE ===== */
+.ticket-date {
+  white-space: nowrap;
+  margin-left: 1rem;
+}
+
+.ticket-date small {
+  font-size: 0.8rem;
+}
+
+.card-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #212529;
+  line-height: 1.3;
+}
+
+.ticket-card:hover .card-title {
+  color: #667eea;
+}
+
+/* ===== BADGES ===== */
+.ticket-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.ticket-badges .badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.4rem 0.6rem;
+  border-radius: 4px;
+}
+
+/* ===== DESCRIPTION ===== */
+.card-text {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  max-height: 3rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ===== FOOTER DE CARTE ===== */
+.ticket-footer {
+  padding-top: 1rem;
+  border-top: 1px solid #e9ecef;
+  font-size: 0.85rem;
+}
+
+/* ===== ARROW D'ACTION ===== */
+.ticket-arrow {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.5rem;
+  color: #667eea;
+  opacity: 0;
+  transition: all 0.3s ease;
+}
+
+.ticket-card:hover .ticket-arrow {
+  opacity: 1;
+  right: 1.5rem;
+}
+
+/* ===== ÉTAT VIDE ===== */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-state-icon {
+  font-size: 4rem;
+  color: #dee2e6;
+  margin-bottom: 1rem;
+}
+
+.empty-state h5 {
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 0.5rem;
+}
+
+.empty-state p {
+  margin-bottom: 2rem;
+}
+
+/* ===== CHARGEMENT ===== */
+#loading {
+  padding: 3rem 2rem;
+}
+
+#loading .spinner-border {
+  border-width: 3px;
+}
+
+/* ===== RESPONSIVE MOBILE ===== */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-header .row {
+    width: 100%;
+  }
+
+  .filters-bar {
+    padding: 1rem;
+  }
+
+  .filters-bar .row {
+    row-gap: 1rem;
+  }
+
+  .filters-bar .form-select-sm {
+    width: 100%;
+  }
+
+  .tickets-list {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .ticket-card .card-body {
+    min-height: auto;
+    padding: 1rem;
+  }
+
+  .ticket-date {
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+
+  .ticket-arrow {
+    opacity: 1;
+    right: 1rem;
+  }
+
+  .card-text {
+    max-height: 2rem;
+    -webkit-line-clamp: 1;
+  }
+}
+
+@media (max-width: 576px) {
+  .page-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .page-header .btn {
+    width: 100%;
+  }
+
+  .filters-bar {
+    padding: 0.75rem;
+  }
+
+  .filters-bar .btn {
+    width: 100%;
+  }
+
+  .ticket-card .card-body {
+    padding: 0.75rem;
+  }
+
+  .ticket-badges {
+    gap: 0.25rem;
+  }
+
+  .ticket-badges .badge {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.5rem;
+  }
+}
+
+/* ===== ANIMATIONS ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ticket-card {
+  animation: fadeIn 0.3s ease;
+}
+
+/* ===== DARK MODE SUPPORT (optionnel) ===== */
+@media (prefers-color-scheme: dark) {
+  .filters-bar {
+    background: #2d2d2d;
+    border-color: #444;
+  }
+
+  .filters-bar .form-select-sm {
+    background-color: #3d3d3d;
+    color: #fff;
+    border-color: #555;
+  }
+
+  .ticket-card .card {
+    background-color: #1a1a1a;
+    border-color: #333;
+  }
+
+  .card-title {
+    color: #e9ecef;
+  }
+
+  .ticket-footer {
+    border-color: #333;
+  }
+
+  .empty-state-icon {
+    color: #444;
+  }
+}
+
+/* ===== ACCESSIBILITÉ ===== */
+.ticket-card:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.filters-bar .form-select-sm:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}
+
+.btn:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}

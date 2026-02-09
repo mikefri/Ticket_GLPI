@@ -3,29 +3,31 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mes demandes d’assistance – Centre d’assistance</title>
+  <title>Mes demandes d'assistance – Centre d'assistance</title>
+
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="stylesheet" href="assets/css/tickets.css">
 </head>
 <body>
 
-<!-- NAVBAR harmonisée -->
+<!-- Navigation -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
     <!-- Logo + titre -->
     <a class="navbar-brand d-flex align-items-center" href="index.html">
-      <img src="assets/img/GLPI.png" alt="Logo" class="brand-logo me-2" />
-      <span class="fw-semibold">Centre d’assistance</span>
+      <img src="assets/img/GLPI.png" alt="Logo GLPI" class="brand-logo me-2" />
+      <span class="fw-semibold">Centre d'assistance</span>
     </a>
 
-    <!-- Burger mobile -->
+    <!-- Burger menu mobile -->
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain"
-            aria-controls="navbarsMain" aria-expanded="false" aria-label="Toggle navigation">
+            aria-controls="navbarsMain" aria-expanded="false" aria-label="Basculer la navigation">
       <span class="navbar-toggler-icon" style="filter: invert(1);"></span>
     </button>
 
-    <!-- Contenu -->
+    <!-- Contenu de la navbar -->
     <div class="collapse navbar-collapse" id="navbarsMain">
       <!-- Liens principaux (centrés) -->
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
@@ -38,7 +40,7 @@
         <li class="nav-item">
           <a class="nav-link" href="profil.html">Mon profil</a>
         </li>
-        <!-- Liens admin (masqués par défaut, JS les affiche) -->
+        <!-- Liens admin (masqués par défaut) -->
         <li class="nav-item d-none" id="nav-admin">
           <a class="nav-link" href="admin.html">Administration</a>
         </li>
@@ -46,7 +48,7 @@
           <a class="nav-link" href="users.html">Utilisateurs & Rôles</a>
         </li>
         <li class="nav-item d-none" id="nav-stats">
-          <a class="nav-link" href="Stats v2.html">Statistiques</a>
+          <a class="nav-link" href="stats-v2.html">Statistiques</a>
         </li>
       </ul>
 
@@ -63,7 +65,7 @@
         <!-- Avatar -->
         <div id="avatar" class="avatar-circle d-none"></div>
 
-        <!-- Connexion / Déconnexion -->
+        <!-- Boutons authentification -->
         <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
         <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
       </div>
@@ -71,67 +73,103 @@
   </div>
 </nav>
 
-<!-- MAIN -->
+<!-- Contenu principal -->
 <main class="container my-5">
-  <div class="d-flex flex-column flex-md-row justify-content-between align-items-center align-items-md-start mb-4 gap-3">
-    <h3 class="mb-0">Mes demandes d’assistance</h3>
 
-    <div class="d-flex flex-wrap gap-2">
-      <!-- Filtres -->
-      <select class="form-select form-select-sm" id="filter-status" style="width: 180px;">
-        <option value="">Tous les statuts</option>
-        <option value="Ouvert">Ouvert</option>
-        <option value="En cours">En cours</option>
-        <option value="En attente">En attente</option>
-        <option value="Résolu">Résolu</option>
-        <option value="Fermé">Fermé</option>
-      </select>
-
-      <select class="form-select form-select-sm" id="filter-category" style="width: 180px;">
-        <option value="">Toutes catégories</option>
-        <option value="Matériel">Matériel</option>
-        <option value="Logiciel">Logiciel</option>
-        <option value="Accès">Accès</option>
-        <option value="Réseau">Réseau</option>
-        <option value="Autre">Autre</option>
-      </select>
-
-      <!-- Bouton créer (toujours visible) -->
-      <a href="index.html" class="btn btn-primary btn-sm">
-        <i class="bi bi-plus-lg me-1"></i> Créer un ticket
-      </a>
+  <!-- En-tête avec titre et actions -->
+  <div class="page-header mb-5">
+    <div class="row align-items-center g-3">
+      <div class="col">
+        <h1 class="h3 mb-0">
+          <i class="bi bi-ticket-detailed me-2"></i>
+          Mes demandes d'assistance
+        </h1>
+      </div>
+      <div class="col-auto">
+        <a href="index.html" class="btn btn-primary">
+          <i class="bi bi-plus-lg me-1"></i> Créer un ticket
+        </a>
+      </div>
     </div>
   </div>
 
+  <!-- Barre de filtrage -->
+  <div class="filters-bar mb-4">
+    <div class="row g-2">
+      <div class="col-12 col-sm-6 col-lg-3">
+        <label for="filter-status" class="form-label small text-muted">Statut</label>
+        <select class="form-select form-select-sm" id="filter-status" aria-label="Filtrer par statut">
+          <option value="">Tous les statuts</option>
+          <option value="Ouvert">Ouvert</option>
+          <option value="En cours">En cours</option>
+          <option value="En attente">En attente</option>
+          <option value="Résolu">Résolu</option>
+          <option value="Fermé">Fermé</option>
+        </select>
+      </div>
+
+      <div class="col-12 col-sm-6 col-lg-3">
+        <label for="filter-category" class="form-label small text-muted">Catégorie</label>
+        <select class="form-select form-select-sm" id="filter-category" aria-label="Filtrer par catégorie">
+          <option value="">Toutes les catégories</option>
+          <option value="Matériel">Matériel</option>
+          <option value="Logiciel">Logiciel</option>
+          <option value="Accès">Accès</option>
+          <option value="Réseau">Réseau</option>
+          <option value="Autre">Autre</option>
+        </select>
+      </div>
+
+      <div class="col-12 col-lg-6">
+        <button class="btn btn-sm btn-outline-secondary" id="btn-reset-filters">
+          <i class="bi bi-x-circle me-1"></i> Réinitialiser les filtres
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chargement -->
+  <div id="loading" class="text-center py-5">
+    <div class="spinner-border text-primary" role="status">
+      <span class="visually-hidden">Chargement...</span>
+    </div>
+    <p class="mt-3 text-muted">Chargement de vos demandes...</p>
+  </div>
+
   <!-- Liste des tickets -->
-  <div id="list" class="vstack gap-3"></div>
+  <div id="list" class="tickets-list"></div>
 
   <!-- Message vide -->
-  <div id="empty" class="text-center py-5 text-muted d-none">
-    <i class="bi bi-inbox fs-1 mb-3 d-block"></i>
-    <p class="lead mb-2">Aucun ticket pour le moment</p>
-    <p class="mb-4">Commencez par créer votre première demande d’assistance.</p>
+  <div id="empty" class="empty-state d-none">
+    <div class="empty-state-icon">
+      <i class="bi bi-inbox"></i>
+    </div>
+    <h5 class="mt-3">Aucun ticket pour le moment</h5>
+    <p class="text-muted mb-4">Commencez par créer votre première demande d'assistance.</p>
     <a href="index.html" class="btn btn-primary">
       <i class="bi bi-plus-lg me-1"></i> Créer un ticket
     </a>
   </div>
+
 </main>
 
-<footer class="text-center py-4 bg-light border-top">
-  <small class="text-muted">© 2026 • Centre d’assistance – Méthodes Logistiques</small>
+<!-- Pied de page -->
+<footer class="text-center py-4 bg-light border-top mt-5">
+  <small class="text-muted">© 2026 • Centre d'assistance – Méthodes Logistiques</small>
 </footer>
 
 <!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
     <div class="toast-header">
-      <strong class="me-auto">Centre d’assistance</strong>
-      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+      <strong class="me-auto">Centre d'assistance</strong>
+      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Fermer"></button>
     </div>
     <div id="toast-body" class="toast-body"></div>
   </div>
 </div>
 
+<!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script type="module" src="assets/js/app.js"></script>
 <script type="module" src="assets/js/tickets.js"></script>

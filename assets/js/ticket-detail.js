@@ -1,5 +1,5 @@
 // assets/js/ticket-detail.js
-// Page de détail d'un ticket
+// Page de détail d'un ticket avec système de chat
 
 import './app.js';
 import { db } from './firebase-init.js';
@@ -19,12 +19,6 @@ let isAdmin = false;
 function getTicketIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
   return params.get('id');
-}
-
-// Formater un nom
-function formatName(name) {
-  if (!name) return 'Non spécifié';
-  return name;
 }
 
 // Charger le ticket
@@ -170,9 +164,6 @@ async function takeTicket() {
       updatedAt: Timestamp.now()
     });
     
-    // Ajouter un commentaire automatique
-    await addComment(`Ticket pris en charge par ${userName}`);
-    
     toast('Ticket pris en charge avec succès');
     
     // Recharger
@@ -195,9 +186,6 @@ async function updateTicketStatus(newStatus) {
       status: newStatus,
       updatedAt: Timestamp.now()
     });
-    
-    // Ajouter un commentaire automatique
-    await addComment(`Statut modifié : ${newStatus}`);
     
     toast(`Statut mis à jour : ${newStatus}`);
     
@@ -227,9 +215,6 @@ async function closeTicket() {
       updatedAt: Timestamp.now()
     });
     
-    // Ajouter un commentaire automatique
-    await addComment('Ticket fermé');
-    
     toast('Ticket fermé avec succès');
     
     // Recharger
@@ -241,52 +226,54 @@ async function closeTicket() {
   }
 }
 
-// Charger les commentaires
+// ===== SYSTÈME DE CHAT AVEC BULLES =====
+
+// Charger et afficher les commentaires en bulles de chat
 function loadComments(ticketId) {
-  const timeline = document.getElementById('timeline');
-  timeline.innerHTML = '';
+  const chatContainer = document.getElementById('chat-messages');
+  chatContainer.innerHTML = '';
   
-  // Commentaire de création du ticket
-  const creationItem = document.createElement('div');
-  creationItem.className = 'timeline-item';
-  creationItem.innerHTML = `
-    <div class="timeline-time">
-      <i class="bi bi-plus-circle-fill me-1"></i>
-      ${formatDate(currentTicket.createdAt)}
-    </div>
-    <div class="timeline-content">
-      <strong>${currentTicket.userName || 'Utilisateur'}</strong> a créé le ticket
-    </div>
-  `;
-  timeline.appendChild(creationItem);
-  
-  // Écouter les commentaires en temps réel
   const commentsRef = collection(db, 'tickets', ticketId, 'comments');
   const q = query(commentsRef, orderBy('createdAt', 'asc'));
   
   onSnapshot(q, (snapshot) => {
-    // Retirer les anciens commentaires (garder seulement la création)
-    while (timeline.children.length > 1) {
-      timeline.removeChild(timeline.lastChild);
-    }
+    chatContainer.innerHTML = '';
     
     snapshot.forEach((doc) => {
       const comment = doc.data();
-      const item = document.createElement('div');
-      item.className = 'timeline-item';
-      item.innerHTML = `
-        <div class="timeline-time">
-          <i class="bi bi-chat-left-text-fill me-1"></i>
-          ${formatDate(comment.createdAt)}
-        </div>
-        <div class="timeline-content">
-          <strong>${comment.userName || 'Utilisateur'}</strong>
-          <div class="mt-2">${comment.text || ''}</div>
+      const isCurrentUser = comment.createdBy === currentUser.uid;
+      
+      const bubble = document.createElement('div');
+      bubble.className = `chat-message ${isCurrentUser ? 'user-message' : 'admin-message'}`;
+      
+      bubble.innerHTML = `
+        <div class="chat-bubble">
+          <div class="chat-author">${comment.userName || 'Utilisateur'}</div>
+          <div class="chat-text">${escapeHtml(comment.text)}</div>
+          <div class="chat-time">${formatDate(comment.createdAt)}</div>
         </div>
       `;
-      timeline.appendChild(item);
+      
+      chatContainer.appendChild(bubble);
     });
+    
+    // Auto-scroller vers le bas
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+  }, (error) => {
+    console.error('[ticket-detail] Erreur chargement commentaires:', error);
   });
+}
+
+// Échapper le HTML pour éviter les injections
+function escapeHtml(text) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, m => map[m]);
 }
 
 // Ajouter un commentaire
@@ -294,7 +281,7 @@ async function addComment(text) {
   if (!currentTicket || !currentUser) return;
   
   if (!text || text.trim() === '') {
-    toast('Le commentaire ne peut pas être vide');
+    toast('Le message ne peut pas être vide');
     return;
   }
   
@@ -312,11 +299,11 @@ async function addComment(text) {
     const textarea = document.getElementById('new-comment');
     if (textarea) textarea.value = '';
     
-    console.log('[ticket-detail] Commentaire ajouté');
+    console.log('[ticket-detail] Message envoyé');
     
   } catch (error) {
-    console.error('[ticket-detail] Erreur ajout commentaire:', error);
-    toast('Erreur lors de l\'ajout du commentaire: ' + error.message);
+    console.error('[ticket-detail] Erreur ajout message:', error);
+    toast('Erreur lors de l\'envoi: ' + error.message);
   }
 }
 
@@ -333,9 +320,9 @@ document.getElementById('btn-add-comment')?.addEventListener('click', () => {
   addComment(text);
 });
 
-// Permettre Ctrl+Enter pour envoyer
+// Permettre Ctrl+Enter ou Shift+Enter pour envoyer
 document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.key === 'Enter') {
+  if ((e.ctrlKey || e.shiftKey) && e.key === 'Enter') {
     const text = e.target.value;
     addComment(text);
   }

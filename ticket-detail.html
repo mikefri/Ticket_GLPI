@@ -53,66 +53,6 @@
       color: #212529;
     }
     
-    .timeline {
-      position: relative;
-      padding-left: 2rem;
-    }
-    
-    .timeline-item {
-      position: relative;
-      padding-bottom: 1.5rem;
-    }
-    
-    .timeline-item:before {
-      content: '';
-      position: absolute;
-      left: -1.5rem;
-      top: 0.5rem;
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #667eea;
-    }
-    
-    .timeline-item:after {
-      content: '';
-      position: absolute;
-      left: -1.46rem;
-      top: 1rem;
-      width: 2px;
-      height: calc(100% - 0.5rem);
-      background: #dee2e6;
-    }
-    
-    .timeline-item:last-child:after {
-      display: none;
-    }
-    
-    .timeline-time {
-      font-size: 0.875rem;
-      color: #6c757d;
-    }
-    
-    .timeline-content {
-      background: #f8f9fa;
-      padding: 1rem;
-      border-radius: 8px;
-      margin-top: 0.5rem;
-    }
-    
-    .comment-box {
-      background: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 8px;
-      padding: 1rem;
-    }
-    
-    .action-buttons {
-      display: flex;
-      gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-    
     .attachment-item {
       display: flex;
       align-items: center;
@@ -126,6 +66,113 @@
       font-size: 1.5rem;
       margin-right: 0.75rem;
       color: #667eea;
+    }
+    
+    .action-buttons {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    /* ===== STYLES CHAT ===== */
+    #chat-container {
+      display: flex;
+      flex-direction: column;
+      height: 600px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+    }
+    
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    
+    .chat-message {
+      display: flex;
+      margin-bottom: 0.5rem;
+    }
+    
+    .chat-message.user-message {
+      justify-content: flex-end;
+    }
+    
+    .chat-message.admin-message {
+      justify-content: flex-start;
+    }
+    
+    .chat-bubble {
+      max-width: 60%;
+      padding: 0.75rem 1rem;
+      border-radius: 12px;
+      background: white;
+      border: 1px solid #dee2e6;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      word-break: break-word;
+    }
+    
+    .chat-message.user-message .chat-bubble {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+    }
+    
+    .chat-author {
+      font-weight: 600;
+      font-size: 0.875rem;
+      margin-bottom: 0.25rem;
+      opacity: 0.8;
+    }
+    
+    .chat-message.user-message .chat-author {
+      opacity: 0.9;
+    }
+    
+    .chat-text {
+      word-wrap: break-word;
+      line-height: 1.4;
+      margin-bottom: 0.5rem;
+    }
+    
+    .chat-time {
+      font-size: 0.75rem;
+      opacity: 0.6;
+    }
+    
+    #chat-input-area {
+      padding: 1rem;
+      border-top: 1px solid #e9ecef;
+      background: white;
+      border-radius: 0 0 8px 8px;
+    }
+    
+    #chat-input-area .input-group {
+      gap: 0.5rem;
+    }
+    
+    #new-comment {
+      resize: none;
+      max-height: 120px;
+    }
+    
+    #btn-add-comment {
+      align-self: flex-end;
+    }
+
+    /* Responsive mobile */
+    @media (max-width: 768px) {
+      #chat-container {
+        height: 400px;
+      }
+      
+      .chat-bubble {
+        max-width: 85%;
+      }
     }
   </style>
 </head>
@@ -275,24 +322,19 @@
         </div>
       </div>
 
-      <!-- Commentaires -->
-      <div class="info-section">
-        <div class="info-label">Historique et commentaires</div>
-        
-        <div class="timeline" id="timeline">
-          <!-- Rempli dynamiquement -->
-        </div>
-
-        <!-- Ajouter un commentaire -->
-        <div class="mt-4">
-          <div class="comment-box">
-            <textarea 
-              class="form-control border-0 bg-transparent" 
-              id="new-comment" 
-              rows="3" 
-              placeholder="Ajouter un commentaire..."></textarea>
-            <div class="d-flex justify-content-end mt-2">
-              <button class="btn btn-sm btn-primary" id="btn-add-comment">
+      <!-- Chat Messages -->
+      <div class="info-section" style="padding: 0;">
+        <div class="info-label p-3 pb-0">Discussion</div>
+        <div id="chat-container">
+          <div id="chat-messages"></div>
+          <div id="chat-input-area">
+            <div class="input-group flex-column">
+              <textarea 
+                class="form-control" 
+                id="new-comment" 
+                rows="2" 
+                placeholder="Votre message..."></textarea>
+              <button class="btn btn-primary btn-sm" id="btn-add-comment" type="button">
                 <i class="bi bi-send-fill me-1"></i> Envoyer
               </button>
             </div>

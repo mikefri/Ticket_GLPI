@@ -41,14 +41,27 @@ function createTicketRow(ticket, columnType) {
   const row = document.createElement('div');
   row.className = 'ticket-row';
   row.dataset.id = ticket.id;
+  row.style.cursor = 'pointer';
   
   const days = daysSince(ticket.createdAt);
   
-  // ID - tronqué à 5 caractères
+  // ID - tronqué à 5 caractères avec lien
   const idDiv = document.createElement('div');
   idDiv.className = 'ticket-id';
-  idDiv.textContent = ticket.id.substring(0, 5);
-  idDiv.title = ticket.id; // ID complet au survol
+  
+  const idLink = document.createElement('a');
+  idLink.href = `ticket-detail.html?id=${ticket.id}`;
+  idLink.textContent = ticket.id.substring(0, 5);
+  idLink.title = ticket.id; // ID complet au survol
+  idLink.style.textDecoration = 'none';
+  idLink.style.color = 'inherit';
+  
+  // Empêcher la propagation pour éviter le double clic
+  idLink.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+  
+  idDiv.appendChild(idLink);
   row.appendChild(idDiv);
   
   // Libellé
@@ -89,7 +102,7 @@ function createTicketRow(ticket, columnType) {
     row.appendChild(daysDiv);
   }
   
-  // Click pour ouvrir le détail (optionnel)
+  // Click sur toute la ligne pour ouvrir le détail
   row.addEventListener('click', () => {
     window.location.href = `ticket-detail.html?id=${ticket.id}`;
   });

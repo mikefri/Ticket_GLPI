@@ -151,6 +151,16 @@
       cursor: not-allowed;
     }
     
+    .btn-test {
+      padding: 8px 20px;
+      background: #28a745;
+      font-size: 0.9rem;
+    }
+    
+    .btn-test:hover {
+      background: #218838;
+    }
+    
     .status {
       text-align: center;
       padding: 10px;
@@ -166,6 +176,10 @@
       color: #e74c3c;
     }
     
+    .status.success {
+      color: #28a745;
+    }
+    
     .config-label {
       font-size: 0.85rem;
       color: #666;
@@ -178,12 +192,18 @@
     }
     
     .info-box {
-      background: #e7f3ff;
-      border-left: 4px solid #2196F3;
-      padding: 10px 15px;
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 12px 15px;
       margin-bottom: 15px;
       border-radius: 4px;
       font-size: 0.85rem;
+      line-height: 1.6;
+    }
+    
+    .step {
+      margin: 5px 0;
+      padding-left: 20px;
     }
   </style>
 </head>
@@ -191,23 +211,31 @@
   <div class="container">
     <div class="header">
       <h1>🤖 IA Base de Connaissance GLPI</h1>
-      <p>Interrogez votre documentation privée</p>
+      <p>100% Gratuit avec Google Gemini</p>
     </div>
     
     <div class="chat-container">
       <div class="config-area">
         <div class="info-box">
-          💡 <strong>Comment obtenir vos clés :</strong><br>
-          • GitHub Token : Settings → Developer settings → Personal access tokens → Generate new token (classic) → Cocher "repo"<br>
-          • Gemini API : <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>
+          <strong>🔑 Configuration Google Gemini (GRATUIT) :</strong><br>
+          <div class="step">1. Allez sur <a href="https://aistudio.google.com/app/apikey" target="_blank"><strong>aistudio.google.com/app/apikey</strong></a></div>
+          <div class="step">2. Connectez-vous avec votre compte Google</div>
+          <div class="step">3. Cliquez sur "Create API Key" → "Create API key in new project"</div>
+          <div class="step">4. Copiez la clé (commence par "AIza...")</div>
+          <div class="step">5. Collez-la ci-dessous et testez !</div>
         </div>
+        
         <div class="config-group">
           <label class="config-label">GitHub Token (ghp_...)</label>
           <input type="password" id="github-token" placeholder="Votre token GitHub pour accéder au dépôt privé">
         </div>
+        
         <div class="config-group">
           <label class="config-label">Clé API Gemini (AIza...)</label>
-          <input type="password" id="gemini-key" placeholder="Votre clé API Google Gemini">
+          <div class="input-group">
+            <input type="password" id="gemini-key" placeholder="AIzaSy...">
+            <button class="btn-test" onclick="testGemini()">Tester</button>
+          </div>
         </div>
       </div>
       
@@ -217,7 +245,7 @@
           <div class="message-content">
             Bonjour ! Je suis prêt à répondre à vos questions sur la base de connaissance GLPI. 
             <br><br>
-            Configurez d'abord votre GitHub Token et votre clé Gemini ci-dessus, puis posez votre question.
+            ⚠️ Configurez d'abord vos clés API ci-dessus et <strong>testez votre clé Gemini</strong> avant de commencer !
           </div>
         </div>
       </div>
@@ -239,19 +267,10 @@
   </div>
 
   <script>
-    // Configuration du dépôt GitHub
     const GITHUB_OWNER = 'mikefri';
     const GITHUB_REPO = 'backup_GLPI';
     const FILE_PATH = 'KNOWLEDGE_BASE.md';
     const BRANCH = 'main';
-    
-    // Liste des modèles Gemini à essayer (du plus récent au plus ancien)
-    const GEMINI_MODELS = [
-      'gemini-2.0-flash-exp',
-      'gemini-1.5-flash',
-      'gemini-1.5-flash-8b',
-      'gemini-pro'
-    ];
     
     function addMessage(text, isUser) {
       const messagesDiv = document.getElementById('chatMessages');
@@ -285,25 +304,38 @@
       statusDiv.className = `status ${type}`;
     }
     
-    async function tryGeminiModel(modelName, geminiKey, prompt) {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{ text: prompt }]
-            }]
-          })
-        }
-      );
+    async function testGemini() {
+      const geminiKey = document.getElementById('gemini-key').value.trim();
       
-      if (!response.ok) {
-        throw new Error(`Model ${modelName} failed: ${response.status}`);
+      if (!geminiKey) {
+        setStatus('⚠️ Entrez votre clé Gemini d\'abord', 'error');
+        return;
       }
       
-      return response;
+      setStatus('🧪 Test de la clé Gemini...', 'loading');
+      
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: 'Dis juste "OK" si tu fonctionnes' }] }]
+            })
+          }
+        );
+        
+        if (response.ok) {
+          setStatus('✅ Gemini fonctionne parfaitement !', 'success');
+          setTimeout(() => setStatus(''), 3000);
+        } else {
+          const error = await response.json();
+          throw new Error(error.error?.message || `HTTP ${response.status}`);
+        }
+      } catch (error) {
+        setStatus(`❌ Erreur : ${error.message}. Créez une nouvelle clé sur aistudio.google.com`, 'error');
+      }
     }
     
     async function sendMessage() {
@@ -315,7 +347,7 @@
       if (!query) return;
       
       if (!githubToken || !geminiKey) {
-        setStatus('⚠️ Veuillez configurer votre GitHub Token et votre clé Gemini', 'error');
+        setStatus('⚠️ Configurez vos tokens', 'error');
         return;
       }
       
@@ -337,46 +369,44 @@
         
         if (!kbResponse.ok) {
           const errorData = await kbResponse.json();
-          throw new Error(`GitHub Error ${kbResponse.status}: ${errorData.message || 'Vérifiez votre token'}`);
+          throw new Error(`GitHub : ${errorData.message}`);
         }
         
         const fileData = await kbResponse.json();
         const knowledgeBase = atob(fileData.content);
         
-        setStatus('🤖 Analyse avec l\'IA (test des modèles)...', 'loading');
+        setStatus('🤖 Analyse avec Gemini...', 'loading');
         
-        // Essayer les modèles Gemini un par un
-        const prompt = `Tu es un expert technique GLPI. Réponds UNIQUEMENT en te basant sur cette documentation :\n\n${knowledgeBase}\n\nQuestion : ${query}\n\nRéponds en français de manière claire et précise.`;
-        
-        let aiResponse = null;
-        let usedModel = null;
-        
-        for (const model of GEMINI_MODELS) {
-          try {
-            setStatus(`🤖 Test du modèle ${model}...`, 'loading');
-            aiResponse = await tryGeminiModel(model, geminiKey, prompt);
-            usedModel = model;
-            console.log(`✅ Modèle fonctionnel: ${model}`);
-            break;
-          } catch (err) {
-            console.log(`❌ Modèle ${model} non disponible:`, err.message);
-            continue;
+        // Appeler Gemini
+        const aiResponse = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: `Tu es un expert technique GLPI. Réponds UNIQUEMENT en te basant sur cette documentation :\n\n${knowledgeBase}\n\nQuestion : ${query}\n\nRéponds en français de manière claire et précise.`
+                }]
+              }]
+            })
           }
-        }
+        );
         
-        if (!aiResponse) {
-          throw new Error('Aucun modèle Gemini disponible. Vérifiez votre clé API ou créez-en une nouvelle sur https://aistudio.google.com/app/apikey');
+        if (!aiResponse.ok) {
+          const error = await aiResponse.json();
+          throw new Error(`Gemini : ${error.error?.message || aiResponse.status}`);
         }
         
         const data = await aiResponse.json();
         const answer = data.candidates[0].content.parts[0].text;
         
         setStatus('');
-        addMessage(answer + `\n\n<small style="color: #999;">Modèle utilisé: ${usedModel}</small>`, false);
+        addMessage(answer, false);
         
       } catch (error) {
         setStatus('❌ ' + error.message, 'error');
-        console.error('Erreur détaillée:', error);
+        console.error(error);
       }
     }
   </script>

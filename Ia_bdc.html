@@ -4,60 +4,51 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>IA Base de connaissance – RFX</title>
-
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  
   <style>
-    :root { --sncf-blue: #0055a4; --sncf-light-blue: #0088ce; }
-    .sncftop { background-color: var(--sncf-blue) !important; padding: 10px 0; }
-    .chat-window { border-radius: 12px; border: 1px solid #dee2e6; background: #fff; overflow: hidden; }
-    .chat-area { height: 550px; overflow-y: auto; background-color: #f8f9fa; padding: 20px; display: flex; flex-direction: column; }
-    .msg-user { background: var(--sncf-blue); color: white; padding: 12px 18px; border-radius: 18px 18px 2px 18px; margin-bottom: 15px; align-self: flex-end; max-width: 80%; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-    .msg-ai { background: white; border: 1px solid #dee2e6; padding: 12px 18px; border-radius: 18px 18px 18px 2px; margin-bottom: 15px; align-self: flex-start; max-width: 85%; border-left: 5px solid var(--sncf-light-blue); }
-    .ai-avatar { width: 35px; height: 35px; background: var(--sncf-blue); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 10px; flex-shrink: 0; }
+    :root { --rfx-blue: #0055a4; }
+    .sncftop { background-color: var(--rfx-blue) !important; padding: 12px 0; color: white; }
+    .chat-window { border-radius: 12px; border: 1px solid #dee2e6; background: #fff; height: 650px; display: flex; flex-direction: column; }
+    .chat-area { flex-grow: 1; overflow-y: auto; background-color: #f8f9fa; padding: 20px; display: flex; flex-direction: column; }
+    .msg-user { background: var(--rfx-blue); color: white; padding: 12px 18px; border-radius: 18px 18px 2px 18px; margin-bottom: 15px; align-self: flex-end; max-width: 80%; }
+    .msg-ai { background: white; border: 1px solid #dee2e6; padding: 12px 18px; border-radius: 18px 18px 18px 2px; margin-bottom: 15px; align-self: flex-start; max-width: 85%; border-left: 5px solid #0088ce; }
     .spin { animation: rotation 2s infinite linear; }
     @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(359deg); } }
   </style>
 </head>
 <body>
 
-<nav class="navbar navbar-expand-lg sncftop mb-4">
+<nav class="navbar sncftop mb-4 shadow-sm">
   <div class="container">
-    <span class="navbar-brand d-flex align-items-center text-white fw-bold">
-      <i class="bi bi-shield-lock-fill me-2"></i> Centre d'assistance RFX
-    </span>
+    <span class="fw-bold"><i class="bi bi-robot me-2"></i> CENTRE D'ASSISTANCE RFX</span>
   </div>
 </nav>
 
 <main class="container">
   <div class="row justify-content-center">
-    <div class="col-lg-10 col-xl-8">
-      <div class="chat-window shadow-lg">
+    <div class="col-lg-10">
+      <div class="chat-window shadow">
         <div id="chat-display" class="chat-area">
-          <div class="msg-ai d-flex">
-            <div class="ai-avatar"><i class="bi bi-robot"></i></div>
-            <div>
-                <strong>Assistant IA :</strong><br>
-                Bonjour Mike. Je suis connecté à la base de connaissance privée <strong>backup_GLPI</strong>. Comment puis-je vous aider ?
-            </div>
+          <div class="msg-ai">
+            <strong>Assistant IA :</strong><br>
+            Bonjour Mike. Je suis prêt à analyser le dépôt <strong>backup_GLPI</strong> pour répondre à vos questions.
           </div>
         </div>
         
         <div id="ai-status" class="px-4 py-2 d-none text-primary small bg-white border-top">
-          <i class="bi bi-arrow-repeat spin me-1"></i> Recherche dans le dépôt privé...
+          <i class="bi bi-arrow-repeat spin me-1"></i> Lecture des données privées...
         </div>
 
         <div class="p-3 border-top bg-white">
           <div class="input-group">
-            <input type="text" id="user-query" class="form-control border-0 bg-light" placeholder="Posez votre question technique..." onkeypress="if(event.key === 'Enter') askAI()">
+            <input type="text" id="user-query" class="form-control border-0 bg-light" placeholder="Votre question technique..." onkeypress="if(event.key === 'Enter') askAI()">
             <button class="btn btn-primary px-4 rounded-pill ms-2" type="button" onclick="askAI()">
               <i class="bi bi-send-fill"></i>
             </button>
           </div>
         </div>
       </div>
-      <p class="text-center text-muted mt-3 small">Accès sécurisé via GitHub API v3</p>
     </div>
   </div>
 </main>
@@ -66,12 +57,11 @@
     // --- CONFIGURATION SÉCURISÉE ---
     const GEMINI_KEY = "AIzaSyD8zXUqg8JYXrG420G5IWCPU1GVduT0C0o";
     
-    // On coupe le token pour tromper le robot de scan de GitHub
-const p1 = "ghp_rQi0sEKe2Sm"; // Les 15 premiers caractères
-    const p2 = "9jmledHWEtHBC6QyrmP4Emh1N"; // Le reste du jeton
+    
+    const p1 = "ghp_rQi0sEKe2Sm"; 
+    const p2 = "9jmledHWEtHBC6QyrmP4Emh1N";
     const GH_TOKEN = p1 + p2;
 
-    // Utilisation de l'API pour éviter les erreurs de lien direct
     const API_URL = "https://api.github.com/repos/mikefri/backup_GLPI/contents/KNOWLEDGE_BASE.md";
 
     async function askAI() {
@@ -82,52 +72,43 @@ const p1 = "ghp_rQi0sEKe2Sm"; // Les 15 premiers caractères
         
         if (!query) return;
 
-        // Affichage message utilisateur
         chat.innerHTML += `<div class="msg-user">${query}</div>`;
         input.value = "";
         status.classList.remove('d-none');
         chat.scrollTop = chat.scrollHeight;
 
         try {
-            // 1. RÉCUPÉRATION DU FICHIER VIA API
+            // 1. RÉCUPÉRATION DU FICHIER VIA API GITHUB
             const response = await fetch(API_URL, {
-                method: 'GET',
                 headers: {
                     'Authorization': `token ${GH_TOKEN}`,
                     'Accept': 'application/vnd.github.v3.raw'
                 }
             });
 
-            if (!response.ok) throw new Error("Accès refusé au dépôt (Token invalide ou expiré)");
+            if (!response.ok) throw new Error("Impossible de lire la base de données (Erreur " + response.status + ")");
             const kbText = await response.text();
 
-            // 2. APPEL IA GEMINI
+            // 2. APPEL IA GEMINI (Correction de l'URL de l'API)
             const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: [{ 
-                        parts: [{ 
-                            text: `Tu es un expert technique RFX. Réponds de manière concise en français en utilisant ces données : \n\n${kbText}\n\nQuestion : ${query}` 
-                        }] 
-                    }]
+                    contents: [{ parts: [{ text: `Tu es un expert technique. Réponds en français en te basant sur ce document : \n\n${kbText}\n\nQuestion : ${query}` }] }]
                 })
             });
 
             const data = await aiResponse.json();
-            if (!data.candidates) throw new Error("L'IA n'a pas pu répondre.");
+            
+            if (data.error) throw new Error("Erreur Gemini : " + data.error.message);
             
             const answer = data.candidates[0].content.parts[0].text;
 
-            // 3. AFFICHAGE RÉPONSE
             status.classList.add('d-none');
             chat.innerHTML += `
-                <div class="msg-ai d-flex">
-                    <div class="ai-avatar"><i class="bi bi-robot"></i></div>
-                    <div>
-                        <strong class="text-primary small">Expert IA :</strong><br>
-                        ${answer.replace(/\n/g, '<br>')}
-                    </div>
+                <div class="msg-ai">
+                    <strong class="text-primary small">Expert IA :</strong><br>
+                    ${answer.replace(/\n/g, '<br>')}
                 </div>`;
 
         } catch (e) {

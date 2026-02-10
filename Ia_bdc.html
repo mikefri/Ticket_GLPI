@@ -7,26 +7,28 @@
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  
   <link rel="stylesheet" href="assets/css/styles.css">
   <link rel="stylesheet" href="assets/css/tickets.css">
+  <link rel="stylesheet" href="assets/css/ia-chat.css">
 </head>
 <body>
 
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
     <a class="navbar-brand d-flex align-items-center" href="index.html">
-      <img src="assets/img/GLPI.png" alt="Logo GLPI" class="brand-logo me-2" style="height: 30px;" />
-      <span class="fw-semibold">Centre d'assistance</span>
+      <img src="assets/img/GLPI.png" alt="Logo GLPI" class="brand-logo me-2" style="height: 30px; filter: brightness(0) invert(1);" />
+      <span class="fw-semibold text-white">Centre d'assistance</span>
     </a>
 
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain" aria-controls="navbarsMain" aria-expanded="false" aria-label="Menu">
       <span class="navbar-toggler-icon" style="filter: invert(1);"></span>
     </button>
 
     <div class="collapse navbar-collapse" id="navbarsMain">
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
         <li class="nav-item">
-          <a class="nav-link active" href="index.html">IA Base de connaissance</a>
+          <a class="nav-link active" aria-current="page" href="index.html">IA Base de connaissance</a>
         </li>
         <li class="nav-item">
           <a class="nav-link" href="tickets.html">Mes demandes</a>
@@ -38,7 +40,7 @@
 
       <div class="d-flex align-items-center gap-3 ms-lg-3">
         <span class="badge rounded-pill bg-info text-dark">
-          <i class="bi bi-cpu-fill me-1"></i>IA Connectée
+          <i class="bi bi-robot me-1"></i>IA Support
         </span>
         <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
       </div>
@@ -48,46 +50,44 @@
 
 <main class="container my-5">
 
-  <div class="page-header mb-5 text-center">
-    <h1 class="h2 mb-3">
-      <i class="bi bi-journal-check text-primary me-2"></i>
+  <div class="page-header mb-4 text-center">
+    <h1 class="h3 mb-2">
+      <i class="bi bi-journal-text text-primary me-2"></i>
       IA Base de connaissance
     </h1>
-    <p class="text-muted mx-auto" style="max-width: 600px;">
-      Interrogez l'intelligence artificielle pour obtenir des réponses immédiates basées sur l'historique des solutions de maintenance.
-    </p>
+    <p class="text-muted">Interrogez l'intelligence artificielle pour trouver des solutions dans l'historique technique.</p>
   </div>
 
   <div class="row justify-content-center">
-    <div class="col-lg-10">
-      <div class="card shadow-sm border-0 bg-white">
-        <div class="card-body p-0">
-          
-          <div id="chat-display" class="chat-area p-4" style="height: 500px; overflow-y: auto; background-color: #fcfcfd;">
-            <div class="d-flex mb-4">
-                <div class="flex-shrink-0">
-                    <div class="bg-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                        <i class="bi bi-robot text-white"></i>
-                    </div>
-                </div>
-                <div class="ms-3 p-3 bg-light rounded-3 shadow-sm" style="max-width: 80%;">
-                    <strong>Assistant IA :</strong><br>
-                    Bonjour ! Je suis prêt à explorer la base de connaissance. Que cherchez-vous à savoir aujourd'hui ?
-                </div>
+    <div class="col-lg-10 col-xl-8">
+      
+      <div class="chat-window shadow-sm">
+        <div id="chat-display" class="chat-area">
+          <div class="msg-container msg-ai">
+            <div class="ai-avatar"><i class="bi bi-robot"></i></div>
+            <div class="msg-content">
+              <strong>Assistant IA Maintenance</strong><br>
+              Bonjour ! Je suis l'IA de la base de connaissance. Je peux vous aider à retrouver des procédures ou des solutions techniques basées sur nos archives. Que puis-je faire pour vous ?
             </div>
           </div>
-
-          <div class="p-3 border-top bg-white rounded-bottom">
-            <div class="input-group">
-              <input type="text" id="user-query" class="form-control border-0 bg-light" placeholder="Ex: Procédure pour l'emplacement MAG2..." style="box-shadow: none;" onkeypress="if(event.key === 'Enter') askAI()">
-              <button class="btn btn-primary rounded-pill px-4 ms-2" type="button" onclick="askAI()">
-                  <i class="bi bi-send-fill me-2"></i>Envoyer
-              </button>
-            </div>
+        </div>
+        
+        <div id="ai-status" class="px-4 d-none">
+          <div class="ai-typing">
+            <i class="bi bi-cpu"></i> Recherche dans la base de connaissance...
           </div>
+        </div>
 
+        <div class="chat-input-area">
+          <div class="chat-input-group">
+            <input type="text" id="user-query" class="form-control" placeholder="Décrivez votre problème technique..." aria-label="Question" onkeypress="if(event.key === 'Enter') askAI()">
+            <button class="btn btn-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 45px; height: 45px;" onclick="askAI()" id="send-btn">
+              <i class="bi bi-send-fill text-white"></i>
+            </button>
+          </div>
         </div>
       </div>
+
     </div>
   </div>
 
@@ -98,66 +98,75 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-    const GEMINI_KEY = "VOTRE_CLE_GEMINI";
-    const GH_TOKEN = "VOTRE_TOKEN_GITHUB";
-    const FILE_URL = "https://raw.githubusercontent.com/VOTRE_USER/backup_GLPI/main/KNOWLEDGE_BASE.md";
+    // --- CONFIGURATION ---
+    const GEMINI_KEY = "VOTRE_CLE_GEMINI"; 
+    const GH_TOKEN = "VOTRE_TOKEN_GITHUB"; 
+    const FILE_URL = "https://raw.githubusercontent.com/VOTRE_UTILISATEUR/backup_GLPI/main/KNOWLEDGE_BASE.md";
 
     async function askAI() {
         const input = document.getElementById('user-query');
         const chat = document.getElementById('chat-display');
+        const status = document.getElementById('ai-status');
         const query = input.value.trim();
+        
         if (!query) return;
 
-        // Message Utilisateur
+        // 1. Afficher le message de l'utilisateur
         chat.innerHTML += `
-            <div class="d-flex justify-content-end mb-4">
-                <div class="p-3 bg-primary text-white rounded-3 shadow-sm" style="max-width: 80%;">
-                    ${query}
-                </div>
+            <div class="msg-container msg-user">
+                <div class="msg-content">${query}</div>
             </div>`;
         
         input.value = "";
-        const loadingId = "load-" + Date.now();
-        chat.innerHTML += `<div id="${loadingId}" class="text-muted small mb-3"><i class="bi bi-search"></i> Consultation de l'expertise en cours...</div>`;
+        status.classList.remove('d-none'); // Montrer l'indicateur de recherche
         chat.scrollTop = chat.scrollHeight;
 
         try {
-            const kbResponse = await fetch(FILE_URL, { headers: { 'Authorization': `token ${GH_TOKEN}` } });
+            // 2. Récupérer le contenu de la base de connaissance (Privée)
+            const kbResponse = await fetch(FILE_URL, { 
+                headers: { 'Authorization': `token ${GH_TOKEN}` } 
+            });
+            
+            if (!kbResponse.ok) throw new Error("Accès refusé au fichier privé");
             const kbText = await kbResponse.text();
 
+            // 3. Appel à l'IA Gemini
             const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    contents: [{ parts: [{ text: `Tu es l'IA Base de connaissance. Utilise strictement ces données pour répondre de façon concise : \n${kbText}\n\nQuestion : ${query}` }] }]
+                    contents: [{ 
+                        parts: [{ 
+                            text: `Tu es l'IA Base de connaissance. Utilise uniquement ces données SNCF pour répondre. Sois précis et technique. \n\nDONNÉES :\n${kbText}\n\nQUESTION : ${query}` 
+                        }] 
+                    }]
                 })
             });
 
             const data = await aiResponse.json();
             const answer = data.candidates[0].content.parts[0].text;
 
-            document.getElementById(loadingId).remove();
+            // 4. Afficher la réponse de l'IA
+            status.classList.add('d-none'); // Masquer l'indicateur
             chat.innerHTML += `
-                <div class="d-flex mb-4">
-                    <div class="flex-shrink-0">
-                        <div class="bg-dark rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                            <i class="bi bi-robot text-white"></i>
-                        </div>
-                    </div>
-                    <div class="ms-3 p-3 bg-white border rounded-3 shadow-sm" style="max-width: 85%;">
-                        <strong class="text-primary small">Expert IA :</strong><br>
+                <div class="msg-container msg-ai">
+                    <div class="ai-avatar"><i class="bi bi-robot"></i></div>
+                    <div class="msg-content">
                         ${answer.replace(/\n/g, '<br>')}
-                        <hr class="my-2">
-                        <div class="small text-muted italic" style="font-size: 0.75rem;">Source : Référentiel technique RFX</div>
+                        <div class="kb-source">Expertise SNCF - Base de connaissance</div>
                     </div>
                 </div>`;
 
         } catch (e) {
-            document.getElementById(loadingId).innerHTML = "<span class='text-danger'>Erreur d'accès à la base de connaissance.</span>";
+            console.error(e);
+            status.innerHTML = `<div class="text-danger small ms-4 mb-3"><i class="bi bi-exclamation-triangle"></i> Erreur d'accès à la base de connaissance.</div>`;
         }
+        
         chat.scrollTop = chat.scrollHeight;
     }
 </script>
+
 </body>
 </html>

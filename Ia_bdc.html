@@ -11,99 +11,73 @@
   <link rel="stylesheet" href="assets/css/styles.css">
   <link rel="stylesheet" href="assets/css/tickets.css">
   <link rel="stylesheet" href="assets/css/ia-chat.css">
+
+  <style>
+    /* Style de secours si ia-chat.css n'est pas chargé */
+    .chat-window { border-radius: 10px; border: 1px solid #dee2e6; background: #fff; }
+    .chat-area { height: 500px; overflow-y: auto; background-color: #f8f9fa; padding: 20px; }
+    .sncftop { background-color: #0055a4 !important; }
+    .msg-user { background: #0055a4; color: white; padding: 10px 15px; border-radius: 15px 15px 0 15px; margin-bottom: 15px; align-self: flex-end; max-width: 80%; }
+    .msg-ai { background: white; border: 1px solid #dee2e6; padding: 10px 15px; border-radius: 15px 15px 15px 0; margin-bottom: 15px; align-self: flex-start; max-width: 80%; border-left: 5px solid #0088ce; }
+  </style>
 </head>
 <body>
 
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
     <a class="navbar-brand d-flex align-items-center" href="index.html">
-      <img src="assets/img/GLPI.png" alt="Logo GLPI" class="brand-logo me-2" style="height: 30px; filter: brightness(0) invert(1);" />
-      <span class="fw-semibold text-white">Centre d'assistance</span>
+      <img src="assets/img/GLPI.png" alt="Logo GLPI" style="height: 30px; filter: brightness(0) invert(1);" />
+      <span class="fw-semibold text-white ms-2">Centre d'assistance</span>
     </a>
-
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain" aria-controls="navbarsMain" aria-expanded="false" aria-label="Menu">
-      <span class="navbar-toggler-icon" style="filter: invert(1);"></span>
-    </button>
-
     <div class="collapse navbar-collapse" id="navbarsMain">
-      <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
-        <li class="nav-item">
-          <a class="nav-link active" aria-current="page" href="index.html">IA Base de connaissance</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="tickets.html">Mes demandes</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="profil.html">Mon profil</a>
-        </li>
+      <ul class="navbar-nav mx-auto">
+        <li class="nav-item"><a class="nav-link text-white active" href="index.html">IA Base de connaissance</a></li>
+        <li class="nav-item"><a class="nav-link text-white-50" href="tickets.html">Mes demandes</a></li>
       </ul>
-
-      <div class="d-flex align-items-center gap-3 ms-lg-3">
-        <span class="badge rounded-pill bg-info text-dark">
-          <i class="bi bi-robot me-1"></i>IA Support
-        </span>
-        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
-      </div>
+      <span class="badge rounded-pill bg-info text-dark"><i class="bi bi-cpu-fill me-1"></i>IA Active</span>
     </div>
   </div>
 </nav>
 
 <main class="container my-5">
-
   <div class="page-header mb-4 text-center">
-    <h1 class="h3 mb-2">
-      <i class="bi bi-journal-text text-primary me-2"></i>
-      IA Base de connaissance
-    </h1>
-    <p class="text-muted">Interrogez l'intelligence artificielle pour trouver des solutions dans l'historique technique.</p>
+    <h1 class="h3"><i class="bi bi-robot text-primary me-2"></i>IA Base de connaissance</h1>
+    <p class="text-muted">Interrogez l'intelligence artificielle sur le dépôt privé <strong>backup GLPI</strong></p>
   </div>
 
   <div class="row justify-content-center">
-    <div class="col-lg-10 col-xl-8">
-      
+    <div class="col-lg-10">
       <div class="chat-window shadow-sm">
-        <div id="chat-display" class="chat-area">
-          <div class="msg-container msg-ai">
-            <div class="ai-avatar"><i class="bi bi-robot"></i></div>
-            <div class="msg-content">
-              <strong>Assistant IA Maintenance</strong><br>
-              Bonjour ! Je suis l'IA de la base de connaissance. Je peux vous aider à retrouver des procédures ou des solutions techniques basées sur nos archives. Que puis-je faire pour vous ?
-            </div>
+        <div id="chat-display" class="chat-area d-flex flex-column">
+          <div class="msg-ai">
+            <strong>Assistant :</strong> Bonjour Mike ! Je suis prêt à consulter la base de connaissance privée. Quelle est votre question ?
           </div>
         </div>
         
-        <div id="ai-status" class="px-4 d-none">
-          <div class="ai-typing">
-            <i class="bi bi-cpu"></i> Recherche dans la base de connaissance...
-          </div>
+        <div id="ai-status" class="px-4 py-2 d-none text-muted small">
+          <i class="bi bi-hourglass-split"></i> Connexion au dépôt privé et analyse...
         </div>
 
-        <div class="chat-input-area">
-          <div class="chat-input-group">
-            <input type="text" id="user-query" class="form-control" placeholder="Décrivez votre problème technique..." aria-label="Question" onkeypress="if(event.key === 'Enter') askAI()">
-            <button class="btn btn-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 45px; height: 45px;" onclick="askAI()" id="send-btn">
-              <i class="bi bi-send-fill text-white"></i>
+        <div class="p-3 border-top">
+          <div class="input-group">
+            <input type="text" id="user-query" class="form-control" placeholder="Posez votre question technique..." onkeypress="if(event.key === 'Enter') askAI()">
+            <button class="btn btn-primary px-4" type="button" onclick="askAI()">
+              <i class="bi bi-send-fill"></i>
             </button>
           </div>
         </div>
       </div>
-
     </div>
   </div>
-
 </main>
-
-<footer class="text-center py-4 bg-light border-top mt-5">
-  <small class="text-muted">© 2026 • IA Base de connaissance – Méthodes Logistiques</small>
-</footer>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
 <script>
     // --- CONFIGURATION ---
     const GEMINI_KEY = "AIzaSyD8zXUqg8JYXrG420G5IWCPU1GVduT0C0o"; 
-    const GH_TOKEN = "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"; 
-    const FILE_URL = "https://raw.githubusercontent.com/mikefri/backup_GLPI/main/KNOWLEDGE_BASE.md";  
+    // ATTENTION : Remplace par ton NOUVEAU token généré sur GitHub
+    const GH_TOKEN = "TON_NOUVEAU_TOKEN_GHP"; 
+    // Note : L'espace dans "backup GLPI" est remplacé par %20 pour l'URL
+    const FILE_URL = "https://raw.githubusercontent.com/mikefri/backup%20GLPI/main/KNOWLEDGE_BASE.md";
 
     async function askAI() {
         const input = document.getElementById('user-query');
@@ -113,33 +87,34 @@
         
         if (!query) return;
 
-        // 1. Afficher le message de l'utilisateur
-        chat.innerHTML += `
-            <div class="msg-container msg-user">
-                <div class="msg-content">${query}</div>
-            </div>`;
-        
+        // 1. Afficher message utilisateur
+        chat.innerHTML += `<div class="msg-user">${query}</div>`;
         input.value = "";
-        status.classList.remove('d-none'); // Montrer l'indicateur de recherche
+        status.classList.remove('d-none');
         chat.scrollTop = chat.scrollHeight;
 
         try {
-            // 2. Récupérer le contenu de la base de connaissance (Privée)
+            // 2. Récupérer le fichier sur le dépôt PRIVÉ
             const kbResponse = await fetch(FILE_URL, { 
-                headers: { 'Authorization': `token ${GH_TOKEN}` } 
+                method: 'GET',
+                headers: { 
+                    'Authorization': `token ${GH_TOKEN}`,
+                    'Accept': 'application/vnd.github.v3.raw'
+                }
             });
+
+            if (!kbResponse.ok) throw new Error("Erreur GitHub: " + kbResponse.status);
             
-            if (!kbResponse.ok) throw new Error("Accès refusé au fichier privé");
             const kbText = await kbResponse.text();
 
-            // 3. Appel à l'IA Gemini
+            // 3. Envoyer à l'IA Gemini
             const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ 
                         parts: [{ 
-                            text: `Tu es l'IA Base de connaissance. Utilise uniquement ces données SNCF pour répondre. Sois précis et technique. \n\nDONNÉES :\n${kbText}\n\nQUESTION : ${query}` 
+                            text: `Tu es un expert technique. Réponds en français en utilisant UNIQUEMENT ces données de maintenance : \n\n${kbText}\n\nQuestion : ${query}` 
                         }] 
                     }]
                 })
@@ -148,25 +123,23 @@
             const data = await aiResponse.json();
             const answer = data.candidates[0].content.parts[0].text;
 
-            // 4. Afficher la réponse de l'IA
-            status.classList.add('d-none'); // Masquer l'indicateur
+            // 4. Afficher la réponse
+            status.classList.add('d-none');
             chat.innerHTML += `
-                <div class="msg-container msg-ai">
-                    <div class="ai-avatar"><i class="bi bi-robot"></i></div>
-                    <div class="msg-content">
-                        ${answer.replace(/\n/g, '<br>')}
-                        <div class="kb-source">Expertise SNCF - Base de connaissance</div>
-                    </div>
+                <div class="msg-ai">
+                    <strong>Expert IA :</strong><br>
+                    ${answer.replace(/\n/g, '<br>')}
+                    <hr><small class="text-muted">Source : backup GLPI / KNOWLEDGE_BASE.md</small>
                 </div>`;
 
         } catch (e) {
             console.error(e);
-            status.innerHTML = `<div class="text-danger small ms-4 mb-3"><i class="bi bi-exclamation-triangle"></i> Erreur d'accès à la base de connaissance.</div>`;
+            status.innerHTML = `<span class="text-danger">Erreur : ${e.message}. Vérifie ton Token GitHub.</span>`;
         }
-        
         chat.scrollTop = chat.scrollHeight;
     }
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

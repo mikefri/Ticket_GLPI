@@ -15,6 +15,7 @@
     .msg-ai { background: white; border: 1px solid #dee2e6; padding: 12px 18px; border-radius: 18px 18px 18px 2px; margin-bottom: 15px; align-self: flex-start; max-width: 85%; border-left: 5px solid #0088ce; }
     .spin { animation: rotation 2s infinite linear; }
     @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(359deg); } }
+    .error-alert { background-color: #f8d7da; color: #721c24; }
   </style>
 </head>
 <body>
@@ -28,16 +29,22 @@
 <main class="container">
   <div class="row justify-content-center">
     <div class="col-lg-10">
+      <!-- Alerte de configuration -->
+      <div id="config-alert" class="alert alert-warning mb-3 d-none">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <strong>Configuration requise :</strong> Veuillez ajouter votre clé API Gemini dans le fichier .env
+      </div>
+
       <div class="chat-window shadow">
         <div id="chat-display" class="chat-area">
           <div class="msg-ai">
             <strong>Assistant IA :</strong><br>
-            Bonjour Mike. Je suis prêt à analyser le dépôt <strong>backup_GLPI</strong> pour répondre à vos questions.
+            Bonjour. Je suis prêt à analyser votre base de connaissance pour répondre à vos questions.
           </div>
         </div>
         
         <div id="ai-status" class="px-4 py-2 d-none text-primary small bg-white border-top">
-          <i class="bi bi-arrow-repeat spin me-1"></i> Lecture des données privées...
+          <i class="bi bi-arrow-repeat spin me-1"></i> Traitement de votre demande...
         </div>
 
         <div class="p-3 border-top bg-white">
@@ -49,20 +56,45 @@
           </div>
         </div>
       </div>
+
+      <div class="mt-3 text-muted small text-center">
+        <i class="bi bi-info-circle me-1"></i> Cette application accède à votre base de connaissance publique via une URL sécurisée.
+      </div>
     </div>
   </div>
 </main>
 
 <script>
-    // --- CONFIGURATION SÉCURISÉE ---
-    const GEMINI_KEY = "AIzaSyD8zXUqg8JYXrG420G5IWCPU1GVduT0C0o";
-    
-    
-    const p1 = "ghp_rQi0sEKe2Sm"; 
-    const p2 = "9jmledHWEtHBC6QyrmP4Emh1N";
-    const GH_TOKEN = p1 + p2;
+    // ⚠️ IMPORTANT : Les clés API NE DOIVENT PAS être dans le code client
+    // Utilisez un backend pour stocker les clés sécurisées
+    // Pour le développement local, configurez via variables d'environnement
 
-    const API_URL = "https://api.github.com/repos/mikefri/backup_GLPI/contents/KNOWLEDGE_BASE.md";
+    const KNOWLEDGE_BASE_URL = "https://raw.githubusercontent.com/mikefri/backup_GLPI/refs/heads/main/KNOWLEDGE_BASE.md";
+    const GEMINI_API_KEY = ""; // À configurer de manière sécurisée
+    
+    let knowledgeBaseCache = null;
+
+    // Vérifier la configuration au chargement
+    window.addEventListener('load', () => {
+        if (!GEMINI_API_KEY) {
+            document.getElementById('config-alert').classList.remove('d-none');
+        }
+    });
+
+    async function fetchKnowledgeBase() {
+        if (knowledgeBaseCache) return knowledgeBaseCache;
+        
+        try {
+            const response = await fetch(KNOWLEDGE_BASE_URL);
+            if (!response.ok) {
+                throw new Error(`Erreur HTTP ${response.status}: Impossible de charger la base de connaissance`);
+            }
+            knowledgeBaseCache = await response.text();
+            return knowledgeBaseCache;
+        } catch (error) {
+            throw new Error(`Impossible d'accéder à la base de connaissance: ${error.message}`);
+        }
+    }
 
     async function askAI() {
         const input = document.getElementById('user-query');
@@ -72,51 +104,96 @@
         
         if (!query) return;
 
-        chat.innerHTML += `<div class="msg-user">${query}</div>`;
+        // Vérifier la clé API
+        if (!GEMINI_API_KEY) {
+            chat.innerHTML += `
+                <div class="msg-user">${query}</div>
+                <div class="alert alert-warning mt-2 mx-4 small">
+                    ⚠️ Clé API Gemini non configurée. Veuillez ajouter GEMINI_API_KEY.
+                </div>`;
+            input.value = "";
+            chat.scrollTop = chat.scrollHeight;
+            return;
+        }
+
+        // Afficher le message utilisateur
+        chat.innerHTML += `<div class="msg-user">${escapeHtml(query)}</div>`;
         input.value = "";
         status.classList.remove('d-none');
         chat.scrollTop = chat.scrollHeight;
 
         try {
-            // 1. RÉCUPÉRATION DU FICHIER VIA API GITHUB
-            const response = await fetch(API_URL, {
-                headers: {
-                    'Authorization': `token ${GH_TOKEN}`,
-                    'Accept': 'application/vnd.github.v3.raw'
+            // Charger la base de connaissance
+            const kbText = await fetchKnowledgeBase();
+
+            // Appel à Gemini API
+            const systemPrompt = `Tu es un expert technique spécialisé dans le support informatique. 
+Réponds toujours en français.
+Utilise UNIQUEMENT les informations contenues dans la base de connaissance fournie.
+Si la réponse n'est pas dans la base de connaissance, indique-le clairement.
+Sois concis et pertinent.`;
+
+            const response = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        systemInstruction: { parts: [{ text: systemPrompt }] },
+                        contents: [{
+                            parts: [{
+                                text: `Base de connaissance:\n\n${kbText}\n\n---\n\nQuestion de l'utilisateur: ${query}`
+                            }]
+                        }],
+                        generationConfig: {
+                            temperature: 0.7,
+                            maxOutputTokens: 1024
+                        }
+                    })
                 }
-            });
+            );
 
-            if (!response.ok) throw new Error("Impossible de lire la base de données (Erreur " + response.status + ")");
-            const kbText = await response.text();
-
-            // 2. APPEL IA GEMINI (Correction de l'URL de l'API)
-            const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: `Tu es un expert technique. Réponds en français en te basant sur ce document : \n\n${kbText}\n\nQuestion : ${query}` }] }]
-                })
-            });
-
-            const data = await aiResponse.json();
+            const data = await response.json();
             
-            if (data.error) throw new Error("Erreur Gemini : " + data.error.message);
+            if (data.error) {
+                throw new Error(`Erreur API Gemini: ${data.error.message}`);
+            }
             
+            if (!data.candidates || !data.candidates[0].content.parts[0]) {
+                throw new Error("Réponse invalide de l'API Gemini");
+            }
+
             const answer = data.candidates[0].content.parts[0].text;
 
             status.classList.add('d-none');
             chat.innerHTML += `
                 <div class="msg-ai">
                     <strong class="text-primary small">Expert IA :</strong><br>
-                    ${answer.replace(/\n/g, '<br>')}
+                    ${escapeHtml(answer).replace(/\n/g, '<br>')}
                 </div>`;
 
-        } catch (e) {
-            console.error(e);
+        } catch (error) {
+            console.error('Erreur:', error);
             status.classList.add('d-none');
-            chat.innerHTML += `<div class="alert alert-danger mx-4 mt-2 small">Erreur : ${e.message}</div>`;
+            chat.innerHTML += `
+                <div class="alert alert-danger mx-4 mt-2 small">
+                    ❌ Erreur: ${escapeHtml(error.message)}
+                </div>`;
         }
+        
         chat.scrollTop = chat.scrollHeight;
+    }
+
+    // Fonction de sécurité pour éviter les injections XSS
+    function escapeHtml(text) {
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, m => map[m]);
     }
 </script>
 

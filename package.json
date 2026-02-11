@@ -1,0 +1,12 @@
+{
+  "name": "assistant-glpi-proxy",
+  "version": "1.0.0",
+  "description": "Proxy sécurisé pour Assistant GLPI",
+  "main": "api/chat.js",
+  "dependencies": {
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}

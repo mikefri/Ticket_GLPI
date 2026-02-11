@@ -1,0 +1,69 @@
+name: Build and Deploy GLPI Assistant
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Fetch knowledge base from private repo
+        env:
+          GITHUB_TOKEN: ${{ secrets.KB_GITHUB_TOKEN }}
+          KB_REPO: ${{ secrets.KB_REPO }}
+          KB_PATH: ${{ secrets.KB_PATH }}
+        run: |
+          echo "Fetching knowledge base from ${KB_REPO}..."
+          
+          # Télécharger le fichier de base de connaissances
+          curl -H "Authorization: token ${GITHUB_TOKEN}" \
+               -H "Accept: application/vnd.github.v3.raw" \
+               -o knowledge_base.md \
+               "https://api.github.com/repos/${KB_REPO}/contents/${KB_PATH}"
+          
+          echo "Knowledge base downloaded successfully"
+          echo "File size: $(wc -c < knowledge_base.md) bytes"
+      
+      - name: Build HTML with embedded knowledge base
+        run: |
+          echo "Building final HTML..."
+          
+          # Lire le contenu de la base de connaissances et échapper les caractères spéciaux
+          KB_CONTENT=$(cat knowledge_base.md | sed 's/\\/\\\\/g' | sed 's/`/\\`/g' | sed 's/\$/\\$/g')
+          
+          # Remplacer le placeholder dans le template
+          sed "s|%%KNOWLEDGE_BASE_CONTENT%%|${KB_CONTENT}|g" index-template.html > index.html
+          
+          echo "HTML built successfully"
+          
+          # Nettoyer le fichier temporaire
+          rm knowledge_base.md
+      
+      - name: Upload artifact for GitHub Pages
+        uses: actions/upload-pages-artifact@v2
+        with:
+          path: '.'
+      
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
+      
+      - name: Build summary
+        run: |
+          echo "✅ Deployment successful!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🌐 **Your GLPI Assistant is live at:**" >> $GITHUB_STEP_SUMMARY
+          echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📝 **Knowledge base updated:** $(date)" >> $GITHUB_STEP_SUMMARY

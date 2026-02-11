@@ -18,7 +18,7 @@ const btnLogin  = $('btn-login');
 const btnLogout = $('btn-logout');
 const navAdmin  = $('nav-admin');   // <li id="nav-admin" class="d-none">...</li>
 const navStats  = $('nav-stats');   // <li id="nav-stats" class="d-none">...</li> (optionnel)
-const navStats  = $('nav-IA')
+const navStats  = $('nav-IA');
 const avatar    = $('avatar');      // <div id="avatar" class="avatar-circle d-none"></div>
 const badge     = $('badge-admin'); // <span id="badge-admin" class="badge ... d-none">Admin</span>
 

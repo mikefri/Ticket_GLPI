@@ -25,7 +25,7 @@ export default async function handler(req, res) {
                 messages: [
                     {
                         role: "system",
-                        content: `Tu es un expert GLPI. Réponds en français en utilisant UNIQUEMENT cette base de connaissances : \n${knowledgeBase}`
+                        content: `Tu es un expert Reflex. Réponds en français en utilisant UNIQUEMENT cette base de connaissances : \n${knowledgeBase}`
                     },
                     { role: "user", content: question }
                 ]

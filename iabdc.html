@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assistant GLPI - Base de Connaissances</title>
+    <title>Assistant GLPI - Expert</title>
     <style>
         * {
             margin: 0;
@@ -12,40 +12,32 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             padding: 20px;
         }
 
         .container {
-            max-width: 900px;
-            margin: 0 auto;
+            width: 100%;
+            max-width: 800px;
         }
 
         .header {
             text-align: center;
             color: white;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-
-        .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
+            margin-bottom: 20px;
         }
 
         .chat-container {
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
             overflow: hidden;
-            height: 600px;
+            height: 70vh;
             display: flex;
             flex-direction: column;
         }
@@ -54,342 +46,197 @@
             flex: 1;
             overflow-y: auto;
             padding: 20px;
-            background: #f8f9fa;
+            background: #fdfdfd;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         .message {
-            margin-bottom: 15px;
-            padding: 15px;
-            border-radius: 10px;
-            max-width: 80%;
-            animation: slideIn 0.3s ease-out;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 85%;
+            line-height: 1.5;
+            font-size: 15px;
+            word-wrap: break-word;
         }
 
         .message.user {
             background: #667eea;
             color: white;
-            margin-left: auto;
+            align-self: flex-end;
+            border-bottom-right-radius: 2px;
         }
 
         .message.assistant {
-            background: white;
+            background: #f1f3f9;
             color: #333;
-            border: 1px solid #e0e0e0;
-            line-height: 1.6;
+            align-self: flex-start;
+            border-bottom-left-radius: 2px;
+            border: 1px solid #e0e6ed;
         }
 
         .message.system {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-            max-width: 100%;
+            background: #fff9db;
+            color: #856404;
+            align-self: center;
+            font-size: 13px;
             text-align: center;
+            max-width: 100%;
         }
 
         .input-area {
             padding: 20px;
             background: white;
-            border-top: 2px solid #e0e0e0;
+            border-top: 1px solid #eee;
             display: flex;
             gap: 10px;
         }
 
-        .input-area input {
+        input {
             flex: 1;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 14px;
+            padding: 14px;
+            border: 2px solid #edf2f7;
+            border-radius: 10px;
+            outline: none;
+            transition: border-color 0.2s;
         }
 
-        .input-area input:focus {
-            outline: none;
+        input:focus {
             border-color: #667eea;
         }
 
         .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .btn-primary {
             background: #667eea;
             color: white;
+            border: none;
+            padding: 0 25px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
         }
 
-        .btn-primary:hover:not(:disabled) {
+        .btn:hover:not(:disabled) {
             background: #5568d3;
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
 
         .btn:disabled {
-            opacity: 0.5;
+            opacity: 0.6;
             cursor: not-allowed;
         }
 
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid #f3f3f3;
-            border-top: 3px solid #667eea;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .status-bar {
-            background: white;
-            border-radius: 12px;
-            padding: 15px 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .status-bar .status-text {
-            font-size: 14px;
-            color: #155724;
-            font-weight: 500;
-        }
-
-        code {
-            background: #f4f4f4;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-        }
-
-        pre {
-            background: #f4f4f4;
-            padding: 15px;
-            border-radius: 8px;
-            overflow-x: auto;
-            margin: 10px 0;
-            border: 1px solid #e0e0e0;
-        }
-
-        pre code {
-            background: transparent;
-            padding: 0;
-        }
-
-        .highlight {
-            background: #fff3cd;
-            padding: 2px 4px;
-            border-radius: 3px;
-        }
+        /* Markdown-like styling */
+        code { background: #e2e8f0; padding: 2px 4px; border-radius: 4px; font-family: monospace; }
+        pre { background: #2d3748; color: white; padding: 15px; border-radius: 8px; overflow-x: auto; margin: 10px 0; }
+        strong { font-weight: 700; }
+        .loading-dots::after { content: '...'; animation: blink 1.5s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
     </style>
 </head>
 <body>
+
     <div class="container">
         <div class="header">
             <h1>🤖 Assistant GLPI</h1>
-            <p>Posez vos questions sur GLPI, je consulte la base de connaissances pour vous répondre</p>
-        </div>
-
-        <div class="status-bar">
-            <div class="status-text" id="statusText">✅ Base de connaissances chargée et prête</div>
+            <p>Expert en base de connaissances</p>
         </div>
 
         <div class="chat-container">
             <div class="messages" id="messages">
-                <div class="message system">
-                    👋 Bienvenue ! La base de connaissances est chargée. Posez-moi vos questions sur GLPI !
+                <div class="message assistant">
+                    Bonjour ! Je suis prêt. Posez-moi vos questions sur la documentation GLPI.
                 </div>
             </div>
+
             <div class="input-area">
                 <input 
                     type="text" 
                     id="questionInput" 
-                    placeholder="Posez votre question sur GLPI..."
-                    onkeypress="if(event.key === 'Enter') askQuestion()"
-                    autofocus
+                    placeholder="Ex: Comment configurer le collecteur mail ?" 
+                    autocomplete="off"
                 >
-                <button class="btn btn-primary" onclick="askQuestion()" id="askBtn">
-                    Envoyer
-                </button>
+                <button class="btn" id="sendBtn" onclick="askQuestion()">Envoyer</button>
             </div>
         </div>
     </div>
 
     <script>
-        // La base de connaissances est intégrée directement ici lors du build
-        const KNOWLEDGE_BASE = `%%KNOWLEDGE_BASE_CONTENT%%`;
+        const input = document.getElementById('questionInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const messagesDiv = document.getElementById('messages');
+
+        // Gérer la touche Entrée
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') askQuestion();
+        });
 
         async function askQuestion() {
-            const input = document.getElementById('questionInput');
             const question = input.value.trim();
-
             if (!question) return;
 
-            // Add user message
+            // UI : Ajouter message utilisateur
             addMessage('user', question);
             input.value = '';
-
-            // Disable input
             input.disabled = true;
-            document.getElementById('askBtn').disabled = true;
+            sendBtn.disabled = true;
 
-            // Add loading
+            // UI : Message de chargement
             const loadingId = 'loading-' + Date.now();
-            addMessage('assistant', '<div class="loading"></div> Recherche dans la base de connaissances...', loadingId);
+            addMessage('assistant', '<span class="loading-dots">Analyse de la base de connaissances</span>', loadingId);
 
             try {
-                const answer = await analyzeQuestion(question);
-                
-                // Remove loading
-                const loadingMsg = document.getElementById(loadingId);
-                if (loadingMsg) loadingMsg.remove();
+                // Appel vers ta fonction Vercel (api/chat.js)
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: question })
+                });
 
-                addMessage('assistant', formatMessage(answer));
+                const data = await response.json();
+                
+                // Supprimer l'indicateur de chargement
+                document.getElementById(loadingId).remove();
+
+                if (data.error) {
+                    addMessage('assistant', `❌ Erreur : ${data.error}`);
+                } else {
+                    addMessage('assistant', formatMessage(data.answer));
+                }
 
             } catch (error) {
-                const loadingMsg = document.getElementById(loadingId);
-                if (loadingMsg) loadingMsg.remove();
-
-                addMessage('assistant', `❌ ${error.message}`);
+                document.getElementById(loadingId)?.remove();
+                addMessage('assistant', "❌ Impossible de contacter le serveur.");
                 console.error(error);
             } finally {
                 input.disabled = false;
-                document.getElementById('askBtn').disabled = false;
+                sendBtn.disabled = false;
                 input.focus();
             }
         }
 
-        async function analyzeQuestion(question) {
-            // Nettoyer et normaliser la question
-            const questionLower = question.toLowerCase();
-            const keywords = questionLower
-                .split(/\s+/)
-                .filter(w => w.length > 3)
-                .filter(w => !['pour', 'dans', 'avec', 'comment', 'quoi', 'quel', 'quelle'].includes(w));
-
-            if (keywords.length === 0) {
-                return "🤔 Pouvez-vous reformuler votre question avec plus de détails ?";
-            }
-
-            const lines = KNOWLEDGE_BASE.split('\n');
-            let relevantSections = new Map(); // Utiliser une Map pour éviter les doublons
-
-            // Recherche des sections pertinentes
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const lineLower = line.toLowerCase();
-                
-                // Calculer un score de pertinence
-                let score = 0;
-                for (const keyword of keywords) {
-                    if (lineLower.includes(keyword)) {
-                        score++;
-                    }
-                }
-
-                // Si la ligne contient au moins un mot-clé
-                if (score > 0) {
-                    // Capturer un contexte plus large
-                    const start = Math.max(0, i - 3);
-                    const end = Math.min(lines.length, i + 5);
-                    const section = lines.slice(start, end).join('\n');
-                    
-                    // Utiliser un identifiant unique basé sur le contenu
-                    const sectionKey = section.trim().substring(0, 100);
-                    
-                    if (!relevantSections.has(sectionKey)) {
-                        relevantSections.set(sectionKey, { section, score });
-                    } else {
-                        // Mettre à jour le score si meilleur
-                        const existing = relevantSections.get(sectionKey);
-                        if (score > existing.score) {
-                            relevantSections.set(sectionKey, { section, score });
-                        }
-                    }
-                }
-            }
-
-            if (relevantSections.size === 0) {
-                return `❌ Je n'ai pas trouvé d'information pertinente dans la base de connaissances pour répondre à cette question.
-
-💡 **Suggestions :**
-- Essayez de reformuler avec des mots-clés différents
-- Vérifiez l'orthographe
-- Posez une question plus spécifique
-
-📚 **Mots-clés recherchés :** ${keywords.join(', ')}`;
-            }
-
-            // Trier par score de pertinence
-            const sortedSections = Array.from(relevantSections.values())
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 3) // Prendre les 3 sections les plus pertinentes
-                .map(item => item.section);
-
-            // Formater la réponse
-            let response = `✅ **Informations trouvées dans la base de connaissances :**\n\n`;
-            
-            sortedSections.forEach((section, index) => {
-                if (index > 0) response += '\n\n---\n\n';
-                response += section.trim();
-            });
-
-            // Ajouter les mots-clés trouvés
-            response += `\n\n---\n\n🔍 **Recherche basée sur :** ${keywords.join(', ')}`;
-
-            return response;
+        function addMessage(type, content, id = null) {
+            const msg = document.createElement('div');
+            msg.className = `message ${type}`;
+            if (id) msg.id = id;
+            msg.innerHTML = content;
+            messagesDiv.appendChild(msg);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
         function formatMessage(text) {
-            // Formater le markdown basique
+            // Gras
+            text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Blocs de code
             text = text.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+            // Code en ligne
             text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-            
-            // Formater les titres markdown
-            text = text.replace(/^### (.+)$/gm, '<strong style="font-size: 1.1em; display: block; margin: 10px 0;">$1</strong>');
-            text = text.replace(/^## (.+)$/gm, '<strong style="font-size: 1.2em; display: block; margin: 12px 0;">$1</strong>');
-            text = text.replace(/^# (.+)$/gm, '<strong style="font-size: 1.3em; display: block; margin: 15px 0;">$1</strong>');
-            
-            // Formater le gras et italique
-            text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-            text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
-            
-            // Convertir les sauts de ligne
+            // Listes
+            text = text.replace(/^\s*[\-\*]\s+(.*)$/gm, '<li>$1</li>');
+            // Sauts de ligne
             text = text.replace(/\n/g, '<br>');
-            
             return text;
-        }
-
-        function addMessage(type, content, id = null) {
-            const messagesDiv = document.getElementById('messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}`;
-            if (id) messageDiv.id = id;
-            messageDiv.innerHTML = content;
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
     </script>
 </body>

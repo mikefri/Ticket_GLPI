@@ -146,7 +146,14 @@ function renderItem(d) {
     <div class="card-body">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div style="flex: 1;">
-          <h5 class="card-title mb-1">${t.title}</h5>
+          <h5 class="card-title mb-1">
+  <a href="ticket-detail.html?id=${id}" 
+     class="text-decoration-none text-dark fw-semibold"
+     title="Voir le détail">
+    ${t.title}
+    <i class="bi bi-box-arrow-up-right ms-1 small opacity-50"></i>
+  </a>
+</h5>
           <div class="mb-2">${details}</div>
           <div class="text-muted small">${meta}</div>
           ${takenInfo}

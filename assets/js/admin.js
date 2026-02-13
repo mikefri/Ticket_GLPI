@@ -30,6 +30,12 @@ let modalEdit = null;
 let currentEditId = null;
 
 // ────────────────────────────────────────────────
+// Ordre de tri
+// ────────────────────────────────────────────────
+const STATUS_ORDER   = { 'Ouvert': 0, 'En cours': 1, 'En attente': 2, 'Résolu': 3, 'Fermé': 4 };
+const PRIORITY_ORDER = { 'Critique': 0, 'Haute': 1, 'Moyenne': 2, 'Basse': 3 };
+
+// ────────────────────────────────────────────────
 // Utils
 // ────────────────────────────────────────────────
 function show(el, yes = true) {
@@ -147,13 +153,13 @@ function renderItem(d) {
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div style="flex: 1;">
           <h5 class="card-title mb-1">
-  <a href="ticket-detail.html?id=${id}" 
-     class="text-decoration-none text-dark fw-semibold"
-     title="Voir le détail">
-    ${t.title}
-    <i class="bi bi-box-arrow-up-right ms-1 small opacity-50"></i>
-  </a>
-</h5>
+            <a href="ticket-detail.html?id=${id}"
+               class="text-decoration-none text-dark fw-semibold"
+               title="Voir le détail">
+              ${t.title}
+              <i class="bi bi-box-arrow-up-right ms-1 small opacity-50"></i>
+            </a>
+          </h5>
           <div class="mb-2">${details}</div>
           <div class="text-muted small">${meta}</div>
           ${takenInfo}
@@ -186,6 +192,15 @@ function refreshList() {
     return (fs === '' || matchStatus) && (!q || hay.includes(q));
   });
 
+  // Tri : statut (Ouvert → Fermé) puis priorité (Critique → Basse)
+  filtered.sort((a, b) => {
+    const ta = a.data();
+    const tb = b.data();
+    const statusDiff = (STATUS_ORDER[ta.status] ?? 99) - (STATUS_ORDER[tb.status] ?? 99);
+    if (statusDiff !== 0) return statusDiff;
+    return (PRIORITY_ORDER[ta.priority] ?? 99) - (PRIORITY_ORDER[tb.priority] ?? 99);
+  });
+
   elList.innerHTML = '';
   show(elEmpty, filtered.length === 0);
   filtered.forEach(d => elList.insertAdjacentHTML('beforeend', renderItem(d)));
@@ -196,14 +211,12 @@ function refreshList() {
     for (const container of containers) {
       const uid = container.getAttribute('data-uid');
       const strongEl = container.querySelector('strong');
-      
+
       if (strongEl) {
-        // Si on a un UID stocké, on l'utilise
         if (uid) {
           const name = await getDisplayName(null, uid);
           strongEl.textContent = name;
         } else {
-          // Sinon on utilise l'admin connecté
           const auth = getAuth();
           const currentUser = auth.currentUser;
           if (currentUser) {
@@ -233,7 +246,6 @@ elList.addEventListener('change', async (e) => {
 
   if (newStatus === oldStatus) return;
 
-  // Récupérer l'utilisateur depuis Firebase Auth
   const auth = getAuth();
   const currentUser = auth.currentUser;
 
@@ -289,28 +301,26 @@ elList.addEventListener('change', async (e) => {
 elList.addEventListener('click', async (e) => {
   const btn = e.target.closest('button[data-edit]');
   if (!btn) return;
-  
+
   currentEditId = btn.getAttribute('data-edit');
-  
+
   try {
     const ticketRef = doc(db, 'tickets', currentEditId);
     const ticketSnap = await getDoc(ticketRef);
-    
+
     if (!ticketSnap.exists()) {
       toast('Ticket introuvable');
       return;
     }
-    
+
     const t = ticketSnap.data();
-    
-    // Remplir le formulaire
+
     document.getElementById('edit-title').value = t.title || '';
     document.getElementById('edit-description').value = t.description || '';
     document.getElementById('edit-category').value = t.category || '';
     document.getElementById('edit-type').value = t.type || '';
     document.getElementById('edit-priority').value = t.priority || 'Moyenne';
-    
-    // Afficher la modal
+
     if (!modalEdit) modalEdit = new bootstrap.Modal(document.getElementById('editModal'));
     modalEdit.show();
   } catch (err) {
@@ -322,92 +332,55 @@ elList.addEventListener('click', async (e) => {
 // Sauvegarde de l'édition
 document.getElementById('btn-save-edit')?.addEventListener('click', async () => {
   if (!currentEditId) return;
-  
+
   const auth = getAuth();
   const currentUser = auth.currentUser;
-  
+
   if (!currentUser) {
     toast('Utilisateur non connecté');
     return;
   }
-  
-  const newTitle = document.getElementById('edit-title').value.trim();
+
+  const newTitle       = document.getElementById('edit-title').value.trim();
   const newDescription = document.getElementById('edit-description').value.trim();
-  const newCategory = document.getElementById('edit-category').value;
-  const newType = document.getElementById('edit-type').value;
-  const newPriority = document.getElementById('edit-priority').value;
-  
+  const newCategory    = document.getElementById('edit-category').value;
+  const newType        = document.getElementById('edit-type').value;
+  const newPriority    = document.getElementById('edit-priority').value;
+
   if (!newTitle || !newDescription) {
     toast('Titre et description requis');
     return;
   }
-  
+
   try {
-    const ticketRef = doc(db, 'tickets', currentEditId);
+    const ticketRef  = doc(db, 'tickets', currentEditId);
     const ticketSnap = await getDoc(ticketRef);
-    const oldData = ticketSnap.data();
-    
+    const oldData    = ticketSnap.data();
+
     const changedBy = await getDisplayName(currentUser, currentUser.uid);
-    
-    // Détecter les changements et créer des entrées d'historique
-    const changes = [];
-    
-    if (oldData.title !== newTitle) {
-      changes.push({
-        field: 'title',
-        oldValue: oldData.title,
-        newValue: newTitle,
-        changedBy,
-        changedByUid: currentUser.uid,
-        changedAt: serverTimestamp()
-      });
+    const changes   = [];
+
+    const fields = [
+      { key: 'title',       oldVal: oldData.title,       newVal: newTitle },
+      { key: 'description', oldVal: oldData.description, newVal: newDescription },
+      { key: 'category',    oldVal: oldData.category,    newVal: newCategory },
+      { key: 'type',        oldVal: oldData.type,        newVal: newType },
+      { key: 'priority',    oldVal: oldData.priority,    newVal: newPriority },
+    ];
+
+    for (const f of fields) {
+      if (f.oldVal !== f.newVal) {
+        changes.push({
+          field: f.key,
+          oldValue: f.oldVal,
+          newValue: f.newVal,
+          changedBy,
+          changedByUid: currentUser.uid,
+          changedAt: serverTimestamp()
+        });
+      }
     }
-    
-    if (oldData.description !== newDescription) {
-      changes.push({
-        field: 'description',
-        oldValue: oldData.description,
-        newValue: newDescription,
-        changedBy,
-        changedByUid: currentUser.uid,
-        changedAt: serverTimestamp()
-      });
-    }
-    
-    if (oldData.category !== newCategory) {
-      changes.push({
-        field: 'category',
-        oldValue: oldData.category,
-        newValue: newCategory,
-        changedBy,
-        changedByUid: currentUser.uid,
-        changedAt: serverTimestamp()
-      });
-    }
-    
-    if (oldData.type !== newType) {
-      changes.push({
-        field: 'type',
-        oldValue: oldData.type,
-        newValue: newType,
-        changedBy,
-        changedByUid: currentUser.uid,
-        changedAt: serverTimestamp()
-      });
-    }
-    
-    if (oldData.priority !== newPriority) {
-      changes.push({
-        field: 'priority',
-        oldValue: oldData.priority,
-        newValue: newPriority,
-        changedBy,
-        changedByUid: currentUser.uid,
-        changedAt: serverTimestamp()
-      });
-    }
-    
-    // Mettre à jour le ticket
+
     await updateDoc(ticketRef, {
       title: newTitle,
       description: newDescription,
@@ -416,12 +389,11 @@ document.getElementById('btn-save-edit')?.addEventListener('click', async () => 
       priority: newPriority,
       updatedAt: serverTimestamp()
     });
-    
-    // Ajouter les entrées d'historique
+
     for (const change of changes) {
       await addDoc(collection(ticketRef, 'history'), change);
     }
-    
+
     toast('Ticket modifié avec succès');
     modalEdit?.hide();
     currentEditId = null;
@@ -462,14 +434,14 @@ elList.addEventListener('click', async (e) => {
   if (!btn) return;
 
   const ticketId = btn.getAttribute('data-history');
-  const content = document.getElementById('history-content');
+  const content  = document.getElementById('history-content');
   content.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></div>';
 
   const modal = new bootstrap.Modal(document.getElementById('historyModal'));
   modal.show();
 
   try {
-    const q = query(collection(db, 'tickets', ticketId, 'history'), orderBy('changedAt', 'desc'));
+    const q    = query(collection(db, 'tickets', ticketId, 'history'), orderBy('changedAt', 'desc'));
     const snap = await getDocs(q);
 
     if (snap.empty) {
@@ -479,10 +451,9 @@ elList.addEventListener('click', async (e) => {
 
     let html = '';
     snap.forEach(ds => {
-      const h = ds.data();
+      const h    = ds.data();
       const date = h.changedAt ? formatDate(h.changedAt.toDate ? h.changedAt.toDate() : new Date(h.changedAt)) : '?';
 
-      // Affichage adapté selon le type de champ
       let changeDisplay = '';
       if (h.field === 'title' || h.field === 'description') {
         changeDisplay = `

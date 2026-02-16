@@ -4,31 +4,26 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Centre d'assistance – Méthodes Logistiques — Administration</title>
-  <!-- Bootstrap & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
-  <!-- Ton CSS -->
   <link rel="stylesheet" href="assets/css/styles.css">
 </head>
 <body>
+
 <!-- NAVBAR -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container">
-    <!-- Logo + titre -->
     <a class="navbar-brand d-flex align-items-center" href="index.html">
       <img src="assets/img/GLPI.png" alt="Logo" class="brand-logo me-2" />
       <span class="fw-semibold">Centre d'assistance</span>
     </a>
 
-    <!-- Burger mobile -->
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain"
             aria-controls="navbarsMain" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon" style="filter: invert(1);"></span>
     </button>
 
-    <!-- Contenu -->
     <div class="collapse navbar-collapse" id="navbarsMain">
-      <!-- Liens principaux (centrés) -->
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
         <li class="nav-item">
           <a class="nav-link" href="index.html">Demander une assistance</a>
@@ -39,7 +34,6 @@
         <li class="nav-item">
           <a class="nav-link" href="profil.html">Mon profil</a>
         </li>
-        <!-- Liens admin (masqués par défaut, JS les affiche) -->
         <li class="nav-item d-none" id="nav-admin">
           <a class="nav-link" href="admin.html">Administration</a>
         </li>
@@ -54,22 +48,12 @@
         </li>
       </ul>
 
-      <!-- Zone droite : connexion / logout / avatar / badge / nom -->
       <div class="d-flex align-items-center gap-3 ms-lg-3">
-        <!-- Nom utilisateur (quand connecté) -->
-        <span class="navbar-text small d-none" id="user-display">
-          <!-- JS remplira : Bonjour Michael F -->
-        </span>
-
-        <!-- Badge Admin -->
+        <span class="navbar-text small d-none" id="user-display"></span>
         <span id="badge-admin" class="badge rounded-pill bg-warning text-dark d-none">
           <i class="bi bi-shield-lock-fill me-1"></i>Admin
         </span>
-
-        <!-- Avatar -->
         <div id="avatar" class="avatar-circle d-none"></div>
-
-        <!-- Boutons connexion/déconnexion -->
         <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
         <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
       </div>
@@ -110,7 +94,7 @@
   <small>© 2026 • Centre d'assistance – Méthodes Logistiques</small>
 </footer>
 
-<!-- Toast Bootstrap -->
+<!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
     <div class="toast-header">
@@ -122,7 +106,7 @@
   </div>
 </div>
 
-<!-- Modal de confirmation suppression -->
+<!-- Modal confirmation suppression -->
 <div class="modal fade" id="confirmDelete" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-sm">
     <div class="modal-content">
@@ -141,7 +125,7 @@
   </div>
 </div>
 
-<!-- Modal d'édition -->
+<!-- Modal édition -->
 <div class="modal fade" id="editModal" tabindex="-1" aria-labelledby="editModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
     <div class="modal-content">
@@ -155,12 +139,10 @@
             <label for="edit-title" class="form-label">Titre <span class="text-danger">*</span></label>
             <input type="text" class="form-control" id="edit-title" required>
           </div>
-
           <div class="mb-3">
             <label for="edit-description" class="form-label">Description <span class="text-danger">*</span></label>
             <textarea class="form-control" id="edit-description" rows="4" required></textarea>
           </div>
-
           <div class="row">
             <div class="col-md-6 mb-3">
               <label for="edit-category" class="form-label">Catégorie <span class="text-danger">*</span></label>
@@ -173,7 +155,6 @@
                 <option>Autre</option>
               </select>
             </div>
-
             <div class="col-md-6 mb-3">
               <label for="edit-type" class="form-label">Type</label>
               <select class="form-select" id="edit-type">
@@ -185,7 +166,6 @@
               </select>
             </div>
           </div>
-
           <div class="mb-3">
             <label for="edit-priority" class="form-label">Priorité <span class="text-danger">*</span></label>
             <select class="form-select" id="edit-priority" required>
@@ -216,9 +196,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
       </div>
       <div class="modal-body">
-        <div id="history-content" class="list-group list-group-flush small">
-          <!-- Contenu injecté dynamiquement -->
-        </div>
+        <div id="history-content" class="list-group list-group-flush small"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
@@ -227,9 +205,55 @@
   </div>
 </div>
 
-<!-- JS Bootstrap -->
+<!-- ══════════════════════════════════════════════
+     Modal Affecter le ticket  ← NOUVEAU
+══════════════════════════════════════════════════ -->
+<div class="modal fade" id="assignModal" tabindex="-1" aria-labelledby="assignModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="assignModalLabel">
+          <i class="bi bi-person-check-fill me-2 text-success"></i>Affecter le ticket
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Filtre texte -->
+        <div class="mb-3">
+          <input type="search" class="form-control form-control-sm" id="assign-search"
+                 placeholder="Rechercher un utilisateur ou admin…">
+        </div>
+
+        <!-- Spinner chargement -->
+        <div id="assign-loading" class="text-center py-3">
+          <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+          <span class="ms-2 small text-muted">Chargement…</span>
+        </div>
+
+        <!-- Liste des utilisateurs -->
+        <div id="assign-user-list" class="list-group list-group-flush d-none"
+             style="max-height: 320px; overflow-y: auto;"></div>
+
+        <!-- Aucun résultat -->
+        <p id="assign-empty" class="text-muted text-center small d-none mt-2">Aucun utilisateur trouvé.</p>
+
+        <!-- Désaffecter -->
+        <div id="assign-unassign-wrap" class="mt-3 pt-3 border-top d-none">
+          <button type="button" class="btn btn-outline-secondary btn-sm w-100" id="btn-unassign">
+            <i class="bi bi-person-x me-1"></i>Retirer l'affectation actuelle
+          </button>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Module de page -->
 <script type="module" src="assets/js/admin.js"></script>
 </body>
 </html>

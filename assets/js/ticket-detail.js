@@ -212,7 +212,7 @@ async function closeTicket() {
   }
 }
 
-// ===== SYSTÈME DE CHAT CORRIGÉ =====
+// ===== SYSTÈME DE CHAT =====
 
 // Charger et afficher les commentaires en bulles de chat
 function loadComments(ticketId) {
@@ -229,7 +229,6 @@ function loadComments(ticketId) {
     unsubscribeComments();
   }
   
-  // Afficher un message de chargement
   chatContainer.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Chargement des messages...</div>';
   
   try {
@@ -256,7 +255,6 @@ function loadComments(ticketId) {
         const comment = docSnap.data();
         console.log('[chat] Message:', comment);
         
-        // Vérifier si c'est le message de l'utilisateur actuel
         const isCurrentUser = currentUser && comment.createdBy === currentUser.uid;
         
         const bubble = document.createElement('div');
@@ -336,6 +334,15 @@ function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
+// Réinitialiser la hauteur du textarea
+function resetTextareaHeight() {
+  const textarea = document.getElementById('new-comment');
+  if (textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = '90px'; // revenir à la hauteur minimale
+  }
+}
+
 // Ajouter un commentaire
 async function addComment(text) {
   console.log('[chat] Tentative ajout message:', text);
@@ -361,10 +368,9 @@ async function addComment(text) {
   const textarea = document.getElementById('new-comment');
   
   try {
-    // Désactiver le bouton pendant l'envoi
     if (btnSend) {
       btnSend.disabled = true;
-      btnSend.innerHTML = '<i class="bi bi-hourglass-split"></i> Envoi...';
+      btnSend.innerHTML = '<i class="bi bi-hourglass-split"></i>';
     }
     
     const commentsRef = collection(db, 'tickets', currentTicket.id, 'comments');
@@ -378,8 +384,11 @@ async function addComment(text) {
     
     console.log('[chat] Message ajouté avec succès');
     
-    // Vider le champ
-    if (textarea) textarea.value = '';
+    // Vider le champ et réinitialiser sa hauteur
+    if (textarea) {
+      textarea.value = '';
+      resetTextareaHeight();
+    }
     
     // Mettre à jour la date de dernière modification du ticket
     const ticketRef = doc(db, 'tickets', currentTicket.id);
@@ -391,10 +400,9 @@ async function addComment(text) {
     console.error('[chat] Erreur ajout message:', error);
     toast('Erreur lors de l\'envoi: ' + error.message);
   } finally {
-    // Réactiver le bouton
     if (btnSend) {
       btnSend.disabled = false;
-      btnSend.innerHTML = '<i class="bi bi-send-fill me-1"></i> Envoyer';
+      btnSend.innerHTML = '<i class="bi bi-send-fill"></i>';
     }
   }
 }
@@ -416,13 +424,22 @@ document.getElementById('btn-add-comment')?.addEventListener('click', () => {
   }
 });
 
-// Entrée avec Ctrl+Enter ou juste Enter
+// Entrée pour envoyer / Shift+Entrée pour saut de ligne
 document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
-  // Enter sans Shift = envoyer
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     addComment(e.target.value);
   }
+});
+
+// ===== AUTO-RESIZE DU TEXTAREA =====
+document.getElementById('new-comment')?.addEventListener('input', function () {
+  // Réinitialiser la hauteur pour recalculer
+  this.style.height = 'auto';
+  // Appliquer la hauteur du contenu, plafonnée à 200px
+  const newHeight = Math.min(this.scrollHeight, 200);
+  // Ne pas descendre sous la hauteur minimale
+  this.style.height = Math.max(newHeight, 90) + 'px';
 });
 
 // ===== INITIALISATION =====

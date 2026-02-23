@@ -245,12 +245,15 @@ body {
 #new-comment {
   flex: 1;
   resize: none;
-  border-radius: 20px;
-  padding: 0.75rem 1rem;
+  border-radius: 16px;
+  padding: 0.85rem 1.1rem;
   border: 1px solid #dee2e6;
-  min-height: 44px;
-  max-height: 120px;
+  min-height: 90px;   /* ← agrandi : était 44px */
+  max-height: 200px;  /* ← agrandi : était 120px */
+  overflow-y: auto;
   font-size: 0.95rem;
+  line-height: 1.6;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 #new-comment:focus {
@@ -261,13 +264,14 @@ body {
 
 #btn-add-comment {
   border-radius: 50%;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  margin-bottom: 2px; /* alignement visuel avec le bas du textarea */
 }
 
 #btn-add-comment i {
@@ -323,9 +327,9 @@ textarea.form-control {
   min-height: 140px; 
 }
 
-/* Ne pas appliquer la hauteur min sur le chat */
+/* Ne pas appliquer la hauteur min globale sur le chat */
 #new-comment.form-control {
-  min-height: 44px;
+  min-height: 90px; /* cohérent avec #new-comment ci-dessus */
 }
 
 /* ===== SCROLLBAR PERSONNALISÉE ===== */
@@ -349,7 +353,7 @@ textarea.form-control {
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
   #chat-container {
-    height: 350px;
+    height: 400px; /* légèrement agrandi aussi sur mobile */
   }
   
   .chat-bubble {
@@ -366,5 +370,9 @@ textarea.form-control {
   
   .info-section {
     padding: 1rem;
+  }
+
+  #new-comment {
+    min-height: 70px; /* un peu moins sur mobile */
   }
 }

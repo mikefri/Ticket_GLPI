@@ -1,213 +1,327 @@
-// assets/js/tickets.js
-// Gestion de la liste des tickets de l'utilisateur avec filtrage et navigation
+// assets/js/ticket-detail.js
+// Page de détail d'un ticket avec système de chat
 
 import './app.js';
 import { db } from './firebase-init.js';
-import { requireAuth, badgeForStatus, badgeForPriority, formatDate, toast } from './app.js';
+import { requireAuth, toast, badgeForStatus, badgeForPriority, formatDate } from './app.js';
 
 import {
-  collection, query, where, orderBy, onSnapshot
+  doc, getDoc, updateDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// Éléments du DOM
-const elList = document.getElementById('list');
-const elEmpty = document.getElementById('empty');
-const elLoading = document.getElementById('loading');
-const filterStatus = document.getElementById('filter-status');
-const filterCategory = document.getElementById('filter-category');
-const btnResetFilters = document.getElementById('btn-reset-filters');
-
-let unsub = null;
+let currentTicket = null;
 let currentUser = null;
+let isAdmin = false;
+let unsubscribeComments = null; // Pour gérer le listener
 
-/**
- * Génère le HTML pour une carte de ticket cliquable
- */
-function renderTicketCard(docSnap) {
-  const ticket = docSnap.data();
-  const id = docSnap.id;
-
-  // Échapper le HTML dans la description
-  const descriptionSafe = (ticket.description || '').replace(/</g, '&lt;').substring(0, 100);
-  const descriptionDisplay = descriptionSafe.length < (ticket.description || '').length 
-    ? descriptionSafe + '...' 
-    : descriptionSafe;
-
-  return `
-    <a href="ticket-detail.html?id=${encodeURIComponent(id)}" class="ticket-card text-decoration-none">
-      <div class="card h-100">
-        <div class="card-body d-flex flex-column">
-          
-          <!-- En-tête: titre et date -->
-          <div class="d-flex justify-content-between align-items-start mb-3">
-            <h5 class="card-title mb-0 flex-grow-1">${escapeHtml(ticket.title)}</h5>
-            <div class="ticket-date">
-              <small class="text-muted">${formatDate(ticket.createdAt)}</small>
-            </div>
-          </div>
-
-          <!-- Badges: statut, priorité, catégorie -->
-          <div class="ticket-badges mb-3">
-            ${badgeForStatus(ticket.status)}
-            ${badgeForPriority(ticket.priority)}
-            <span class="badge bg-light text-dark">
-              <i class="bi bi-tag-fill me-1"></i>${escapeHtml(ticket.category || 'Non spécifiée')}
-            </span>
-            ${ticket.type ? `<span class="badge bg-light text-dark">${escapeHtml(ticket.type)}</span>` : ''}
-          </div>
-
-          <!-- Description -->
-          <p class="card-text text-muted flex-grow-1 mb-3">
-            ${descapeHtml(descriptionDisplay)}
-          </p>
-
-          <!-- Identifiant du ticket -->
-          <div class="ticket-footer">
-            <small class="text-muted">
-              <i class="bi bi-hash me-1"></i>Ticket #${escapeHtml(id)}
-            </small>
-          </div>
-
-        </div>
-
-        <!-- Arrow d'action au survol -->
-        <div class="ticket-arrow">
-          <i class="bi bi-chevron-right"></i>
-        </div>
-      </div>
-    </a>
-  `;
+// Récupérer l'ID du ticket depuis l'URL
+function getTicketIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('id');
 }
 
-/**
- * Construit la query Firestore en fonction des filtres
- */
-function buildQuery(user) {
-  const clauses = [
-    where('createdBy', '==', user.uid)
-  ];
-
-  if (filterStatus.value) {
-    clauses.push(where('status', '==', filterStatus.value));
-  }
-
-  if (filterCategory.value) {
-    clauses.push(where('category', '==', filterCategory.value));
-  }
-
-  // Tri par date de création (plus récent en premier)
-  clauses.push(orderBy('createdAt', 'desc'));
-
-  return query(collection(db, 'tickets'), ...clauses);
-}
-
-/**
- * Attache un listener Firestore et affiche les tickets
- */
-async function attachListener(user) {
-  if (unsub) {
-    unsub();
-  }
-
-  elLoading.classList.remove('d-none');
-  elList.innerHTML = '';
-  elEmpty.classList.add('d-none');
-
-  try {
-    const q = buildQuery(user);
-
-    unsub = onSnapshot(
-      q,
-      (snap) => {
-        // Cacher le chargement
-        elLoading.classList.add('d-none');
-        elList.innerHTML = '';
-
-        // Si aucun ticket
-        if (snap.empty) {
-          elEmpty.classList.remove('d-none');
-          return;
-        }
-
-        // Afficher les tickets
-        elEmpty.classList.add('d-none');
-        snap.forEach((docSnap) => {
-          elList.insertAdjacentHTML('beforeend', renderTicketCard(docSnap));
-        });
-
-        // Ajouter des event listeners sur les cartes
-        attachCardListeners();
-      },
-      (err) => {
-        // Gestion des erreurs
-        console.error('[tickets] Erreur onSnapshot:', err);
-        elLoading.classList.add('d-none');
-
-        let message = 'Erreur de chargement des tickets';
-
-        if (err?.code === 'failed-precondition' || err?.message?.includes('index')) {
-          message = 'Cette recherche nécessite un index Firestore. Consultez la console pour plus de détails.';
-        } else if (err?.code === 'permission-denied') {
-          message = 'Permissions insuffisantes. Vérifiez vos droits d\'accès.';
-        } else if (err?.message) {
-          message += ': ' + err.message;
-        }
-
-        toast(message);
-        elEmpty.classList.remove('d-none');
-      }
-    );
-
-  } catch (error) {
-    console.error('[tickets] Erreur buildQuery:', error);
-    elLoading.classList.add('d-none');
-    toast('Erreur lors de la construction de la requête: ' + error.message);
-    elEmpty.classList.remove('d-none');
-  }
-}
-
-/**
- * Ajoute les event listeners sur les cartes de tickets
- */
-function attachCardListeners() {
-  const cards = document.querySelectorAll('.ticket-card');
+// Charger le ticket
+async function loadTicket(ticketId) {
+  console.log('[ticket-detail] Chargement du ticket:', ticketId);
   
-  cards.forEach((card) => {
-    card.addEventListener('click', (e) => {
-      // Éviter la navigation double si on clique sur le lien
-      if (e.target.closest('a')) {
-        return;
-      }
-      // Sinon, simuler un clic sur le lien
-      card.click();
-    });
+  try {
+    const ticketRef = doc(db, 'tickets', ticketId);
+    const ticketSnap = await getDoc(ticketRef);
+    
+    if (!ticketSnap.exists()) {
+      showError('Ticket introuvable');
+      return;
+    }
+    
+    currentTicket = { id: ticketSnap.id, ...ticketSnap.data() };
+    console.log('[ticket-detail] Ticket chargé:', currentTicket);
+    
+    displayTicket(currentTicket);
+    
+    // Charger les commentaires APRÈS avoir vérifié currentUser
+    if (currentUser) {
+      loadComments(ticketId);
+    } else {
+      console.error('[ticket-detail] currentUser non défini !');
+    }
+    
+  } catch (error) {
+    console.error('[ticket-detail] Erreur de chargement:', error);
+    showError('Erreur lors du chargement du ticket: ' + error.message);
+  }
+}
 
-    // Animation au survol
-    card.addEventListener('mouseenter', () => {
-      card.style.transform = 'translateY(-2px)';
-    });
+// Afficher le ticket
+function displayTicket(ticket) {
+  document.getElementById('loading').classList.add('d-none');
+  document.getElementById('ticket-content').classList.remove('d-none');
+  
+  document.getElementById('ticket-title').textContent = ticket.title || 'Sans titre';
+  document.getElementById('ticket-id').textContent = ticket.id;
+  
+  const badgesDiv = document.getElementById('ticket-badges');
+  badgesDiv.innerHTML = `
+    ${badgeForStatus(ticket.status)}
+    ${badgeForPriority(ticket.priority)}
+  `;
+  
+  document.getElementById('ticket-created').textContent = formatDate(ticket.createdAt);
+  document.getElementById('ticket-updated').textContent = formatDate(ticket.updatedAt || ticket.createdAt);
+  
+  document.getElementById('requester-name').textContent = ticket.userName || 'Utilisateur inconnu';
+  
+  document.getElementById('ticket-category').textContent = ticket.category || 'Non spécifiée';
+  const typeSpan = document.getElementById('ticket-type');
+  if (ticket.type) {
+    typeSpan.textContent = ' • ' + ticket.type;
+  }
+  
+  const assignedName = ticket.takenBy || ticket.assignedTo || 'Non assigné';
+  document.getElementById('assigned-name').textContent = assignedName;
+  
+  document.getElementById('ticket-description').textContent = ticket.description || 'Aucune description fournie.';
+  
+  if (ticket.attachments && ticket.attachments.length > 0) {
+    displayAttachments(ticket.attachments);
+  }
+  
+  if (isAdmin) {
+    displayAdminActions(ticket);
+  }
+}
 
-    card.addEventListener('mouseleave', () => {
-      card.style.transform = 'translateY(0)';
-    });
+// Afficher les pièces jointes
+function displayAttachments(attachments) {
+  const section = document.getElementById('attachments-section');
+  const list = document.getElementById('attachments-list');
+  
+  section.style.display = 'block';
+  list.innerHTML = '';
+  
+  attachments.forEach(att => {
+    const item = document.createElement('div');
+    item.className = 'attachment-item';
+    item.innerHTML = `
+      <i class="bi bi-file-earmark-text attachment-icon"></i>
+      <div class="flex-grow-1">
+        <div class="fw-medium">${att.name || 'Fichier'}</div>
+        <small class="text-muted">${att.size || ''}</small>
+      </div>
+      <a href="${att.url}" target="_blank" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-download"></i> Télécharger
+      </a>
+    `;
+    list.appendChild(item);
   });
 }
 
-/**
- * Réinitialise les filtres
- */
-function resetFilters() {
-  filterStatus.value = '';
-  filterCategory.value = '';
+// Afficher les actions admin
+function displayAdminActions(ticket) {
+  const actionsSection = document.getElementById('admin-actions');
+  actionsSection.classList.remove('d-none');
   
-  if (currentUser) {
-    attachListener(currentUser);
+  const btnTake = document.getElementById('btn-take-ticket');
+  const btnResolve = document.getElementById('btn-resolve-ticket');
+  const btnProgress = document.getElementById('btn-progress-ticket');
+  const btnClose = document.getElementById('btn-close-ticket');
+  
+  if (ticket.status === 'Résolu' || ticket.status === 'Fermé') {
+    btnTake.disabled = true;
+    btnResolve.disabled = true;
+    btnProgress.disabled = true;
+  }
+  
+  if (ticket.status === 'Fermé') {
+    btnClose.disabled = true;
+  }
+  
+  btnTake.onclick = () => takeTicket();
+  btnResolve.onclick = () => updateTicketStatus('Résolu');
+  btnProgress.onclick = () => updateTicketStatus('En attente');
+  btnClose.onclick = () => closeTicket();
+}
+
+// Prendre en charge un ticket
+async function takeTicket() {
+  if (!currentTicket || !currentUser) return;
+  
+  try {
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+    const userName = currentUser.displayName || currentUser.email;
+    
+    await updateDoc(ticketRef, {
+      status: 'En cours',
+      takenBy: userName,
+      takenByUid: currentUser.uid,
+      updatedAt: Timestamp.now()
+    });
+    
+    toast('Ticket pris en charge avec succès');
+    await loadTicket(currentTicket.id);
+    
+  } catch (error) {
+    console.error('[ticket-detail] Erreur prise en charge:', error);
+    toast('Erreur lors de la prise en charge: ' + error.message);
   }
 }
 
-/**
- * Échappe le HTML
- */
+// Mettre à jour le statut
+async function updateTicketStatus(newStatus) {
+  if (!currentTicket) return;
+  
+  try {
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+    
+    await updateDoc(ticketRef, {
+      status: newStatus,
+      updatedAt: Timestamp.now()
+    });
+    
+    toast(`Statut mis à jour : ${newStatus}`);
+    await loadTicket(currentTicket.id);
+    
+  } catch (error) {
+    console.error('[ticket-detail] Erreur mise à jour statut:', error);
+    toast('Erreur lors de la mise à jour: ' + error.message);
+  }
+}
+
+// Fermer le ticket
+async function closeTicket() {
+  if (!currentTicket) return;
+  
+  if (!confirm('Êtes-vous sûr de vouloir fermer ce ticket ?')) {
+    return;
+  }
+  
+  try {
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+    
+    await updateDoc(ticketRef, {
+      status: 'Fermé',
+      closedAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+    
+    toast('Ticket fermé avec succès');
+    await loadTicket(currentTicket.id);
+    
+  } catch (error) {
+    console.error('[ticket-detail] Erreur fermeture:', error);
+    toast('Erreur lors de la fermeture: ' + error.message);
+  }
+}
+
+// ===== SYSTÈME DE CHAT =====
+
+// Charger et afficher les commentaires en bulles de chat
+function loadComments(ticketId) {
+  console.log('[chat] Chargement des commentaires pour ticket:', ticketId);
+  
+  const chatContainer = document.getElementById('chat-messages');
+  if (!chatContainer) {
+    console.error('[chat] Element #chat-messages non trouvé !');
+    return;
+  }
+  
+  // Annuler l'ancien listener si présent
+  if (unsubscribeComments) {
+    unsubscribeComments();
+  }
+  
+  chatContainer.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Chargement des messages...</div>';
+  
+  try {
+    const commentsRef = collection(db, 'tickets', ticketId, 'comments');
+    const q = query(commentsRef, orderBy('createdAt', 'asc'));
+    
+    unsubscribeComments = onSnapshot(q, (snapshot) => {
+      console.log('[chat] Snapshot reçu, nb docs:', snapshot.size);
+      
+      chatContainer.innerHTML = '';
+      
+      if (snapshot.empty) {
+        chatContainer.innerHTML = `
+          <div class="text-center text-muted py-4">
+            <i class="bi bi-chat-dots fs-1 d-block mb-2"></i>
+            Aucun message pour le moment.<br>
+            <small>Soyez le premier à écrire !</small>
+          </div>
+        `;
+        return;
+      }
+      
+      snapshot.forEach((docSnap) => {
+        const comment = docSnap.data();
+        console.log('[chat] Message:', comment);
+        
+        const isCurrentUser = currentUser && comment.createdBy === currentUser.uid;
+        
+        const bubble = document.createElement('div');
+        bubble.className = `chat-message ${isCurrentUser ? 'user-message' : 'admin-message'}`;
+        
+        bubble.innerHTML = `
+          <div class="chat-bubble">
+            <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
+            <div class="chat-text">${escapeHtml(comment.text || '')}</div>
+            <div class="chat-time">${formatCommentDate(comment.createdAt)}</div>
+          </div>
+        `;
+        
+        chatContainer.appendChild(bubble);
+      });
+      
+      // Auto-scroll vers le bas
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+      
+    }, (error) => {
+      console.error('[chat] Erreur onSnapshot:', error);
+      chatContainer.innerHTML = `
+        <div class="alert alert-danger m-3">
+          <i class="bi bi-exclamation-triangle"></i> 
+          Erreur de chargement des messages: ${error.message}
+        </div>
+      `;
+    });
+    
+  } catch (error) {
+    console.error('[chat] Erreur création query:', error);
+    chatContainer.innerHTML = `
+      <div class="alert alert-danger m-3">
+        Erreur: ${error.message}
+      </div>
+    `;
+  }
+}
+
+// Formater la date des commentaires
+function formatCommentDate(timestamp) {
+  if (!timestamp) return '';
+  
+  try {
+    let date;
+    if (timestamp.toDate) {
+      date = timestamp.toDate();
+    } else if (timestamp.seconds) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      date = new Date(timestamp);
+    }
+    
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    console.error('[chat] Erreur formatage date:', e);
+    return '';
+  }
+}
+
+// Échapper le HTML
 function escapeHtml(text) {
   if (!text) return '';
   const map = {
@@ -217,57 +331,147 @@ function escapeHtml(text) {
     '"': '&quot;',
     "'": '&#039;'
   };
-  return String(text).replace(/[&<>"']/g, (m) => map[m]);
+  return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
-/**
- * Dés-échappe le HTML si nécessaire (pour l'affichage)
- */
-function descapeHtml(text) {
-  const map = {
-    '&amp;': '&',
-    '&lt;': '<',
-    '&gt;': '>',
-    '&quot;': '"',
-    '&#039;': "'"
-  };
-  return String(text).replace(/&amp;|&lt;|&gt;|&quot;|&#039;/g, (m) => map[m]);
+// Réinitialiser la hauteur du textarea
+function resetTextareaHeight() {
+  const textarea = document.getElementById('new-comment');
+  if (textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = '90px'; // revenir à la hauteur minimale
+  }
+}
+
+// Ajouter un commentaire
+async function addComment(text) {
+  console.log('[chat] Tentative ajout message:', text);
+  
+  if (!currentTicket) {
+    console.error('[chat] Pas de ticket courant');
+    toast('Erreur: ticket non chargé');
+    return;
+  }
+  
+  if (!currentUser) {
+    console.error('[chat] Pas d\'utilisateur connecté');
+    toast('Erreur: vous devez être connecté');
+    return;
+  }
+  
+  if (!text || text.trim() === '') {
+    toast('Le message ne peut pas être vide');
+    return;
+  }
+  
+  const btnSend = document.getElementById('btn-add-comment');
+  const textarea = document.getElementById('new-comment');
+  
+  try {
+    if (btnSend) {
+      btnSend.disabled = true;
+      btnSend.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    }
+    
+    const commentsRef = collection(db, 'tickets', currentTicket.id, 'comments');
+    
+    await addDoc(commentsRef, {
+      text: text.trim(),
+      createdBy: currentUser.uid,
+      userName: currentUser.displayName || currentUser.email || 'Utilisateur',
+      createdAt: Timestamp.now()
+    });
+    
+    console.log('[chat] Message ajouté avec succès');
+    
+    // Vider le champ et réinitialiser sa hauteur
+    if (textarea) {
+      textarea.value = '';
+      resetTextareaHeight();
+    }
+    
+    // Mettre à jour la date de dernière modification du ticket
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+    await updateDoc(ticketRef, {
+      updatedAt: Timestamp.now()
+    });
+    
+  } catch (error) {
+    console.error('[chat] Erreur ajout message:', error);
+    toast('Erreur lors de l\'envoi: ' + error.message);
+  } finally {
+    if (btnSend) {
+      btnSend.disabled = false;
+      btnSend.innerHTML = '<i class="bi bi-send-fill"></i>';
+    }
+  }
+}
+
+// Afficher une erreur
+function showError(message) {
+  document.getElementById('loading').classList.add('d-none');
+  document.getElementById('error').classList.remove('d-none');
+  document.getElementById('error-message').textContent = message;
 }
 
 // ===== EVENT LISTENERS =====
 
-filterStatus.addEventListener('change', () => {
-  if (currentUser) {
-    attachListener(currentUser);
+// Bouton envoyer
+document.getElementById('btn-add-comment')?.addEventListener('click', () => {
+  const textarea = document.getElementById('new-comment');
+  if (textarea) {
+    addComment(textarea.value);
   }
 });
 
-filterCategory.addEventListener('change', () => {
-  if (currentUser) {
-    attachListener(currentUser);
+// Entrée pour envoyer / Shift+Entrée pour saut de ligne
+document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    addComment(e.target.value);
   }
 });
 
-btnResetFilters.addEventListener('click', resetFilters);
+// ===== AUTO-RESIZE DU TEXTAREA =====
+document.getElementById('new-comment')?.addEventListener('input', function () {
+  // Réinitialiser la hauteur pour recalculer
+  this.style.height = 'auto';
+  // Appliquer la hauteur du contenu, plafonnée à 200px
+  const newHeight = Math.min(this.scrollHeight, 200);
+  // Ne pas descendre sous la hauteur minimale
+  this.style.height = Math.max(newHeight, 90) + 'px';
+});
 
 // ===== INITIALISATION =====
 (async () => {
-  console.log('[tickets] ===== INITIALISATION =====');
-
-  // Vérifier l'authentification
-  const user = await requireAuth(true);
+  console.log('[ticket-detail] ===== INITIALISATION =====');
   
-  if (!user) {
-    console.error('[tickets] Utilisateur non authentifié');
-    toast('Vous devez être connecté pour voir vos tickets');
+  const ticketId = getTicketIdFromUrl();
+  console.log('[ticket-detail] Ticket ID depuis URL:', ticketId);
+  
+  if (!ticketId) {
+    showError('Aucun ID de ticket fourni dans l\'URL');
     return;
   }
-
+  
+  // Authentification
+  const user = await requireAuth(true);
+  console.log('[ticket-detail] Utilisateur après requireAuth:', user);
+  
+  if (!user) {
+    showError('Vous devez être connecté pour voir ce ticket');
+    return;
+  }
+  
+  // IMPORTANT: définir currentUser AVANT de charger le ticket
   currentUser = user;
-  console.log('[tickets] Utilisateur connecté:', user.email);
-
-  // Charger les tickets
-  await attachListener(user);
-
-  console.log('[tickets] ===== INITIALISATION TERMINÉE =====');
+  isAdmin = window.__isAdmin === true;
+  
+  console.log('[ticket-detail] currentUser défini:', currentUser.email);
+  console.log('[ticket-detail] isAdmin:', isAdmin);
+  
+  // Charger le ticket
+  await loadTicket(ticketId);
+  
+  console.log('[ticket-detail] ===== INITIALISATION TERMINÉE =====');
 })();

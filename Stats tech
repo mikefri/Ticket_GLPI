@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Méthodes Logistiques – Performance Techniciens</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="stylesheet" href="assets/css/stats-tech.css">
+</head>
+<body>
+
+<!-- ── Navbar ── -->
+<nav class="navbar navbar-expand-lg sncftop">
+  <div class="container-fluid">
+    <a class="navbar-brand d-flex align-items-center" href="index.html">
+      <img src="assets/img/GLPI.png" alt="" class="brand-logo"/>
+      <span class="ms-2">Centre d'assistance</span>
+    </a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarsMain">
+      <span class="navbar-toggler-icon" style="filter: invert(1)"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarsMain">
+      <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
+        <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d'assistance</a></li>
+        <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
+        <li class="nav-item d-none" id="nav-stats"><a class="nav-link" href="stats-v2.html">Statistiques</a></li>
+        <li class="nav-item"><a class="nav-link active" href="stats-tech.html">Performance</a></li>
+        <li class="nav-item">
+          <a class="nav-link" href="https://ticket-glpi-git-main-micfris-projects.vercel.app/iabdc.html">IA</a>
+        </li>
+      </ul>
+      <div class="d-flex align-items-center gap-2">
+        <span id="badge-admin" class="badge rounded-pill bg-warning text-dark ms-1 d-none">
+          <i class="bi bi-shield-lock-fill me-1"></i>Admin
+        </span>
+        <a href="login.html" id="btn-login" class="btn btn-light btn-sm">Se connecter</a>
+        <button id="btn-logout" class="btn btn-outline-light btn-sm d-none">Se déconnecter</button>
+        <div id="avatar" class="avatar-circle ms-2 d-none">ED</div>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main ── -->
+<main class="container-fluid my-4 px-4">
+
+  <!-- Header -->
+  <div class="tech-page-header">
+    <div>
+      <div class="tech-page-title">
+        <span id="user-display">–</span> — Performance des techniciens
+      </div>
+      <div class="tech-page-subtitle">Tickets traités · Temps de résolution · Charge active</div>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+      <!-- Sélecteur de période -->
+      <div class="period-selector">
+        <button class="period-btn" data-period="week">Semaine</button>
+        <button class="period-btn active" data-period="month">Mois</button>
+        <button class="period-btn" data-period="year">Année</button>
+        <button class="period-btn" data-period="all">Tout</button>
+      </div>
+      <button class="btn-refresh-tech" id="btn-refresh-tech">
+        <i class="bi bi-arrow-clockwise"></i> Actualiser
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="kpi-strip">
+    <div class="kpi-card kpi-blue">
+      <div class="kpi-value" id="kpi-total-closed">–</div>
+      <div class="kpi-label">Tickets fermés</div>
+      <div class="kpi-period">Tous temps confondus</div>
+    </div>
+    <div class="kpi-card kpi-green">
+      <div class="kpi-value" id="kpi-month-closed">–</div>
+      <div class="kpi-label">Fermés ce mois</div>
+      <div class="kpi-period">Mois en cours</div>
+    </div>
+    <div class="kpi-card kpi-orange">
+      <div class="kpi-value" id="kpi-week-closed">–</div>
+      <div class="kpi-label">Fermés cette semaine</div>
+      <div class="kpi-period">Depuis lundi</div>
+    </div>
+    <div class="kpi-card kpi-purple">
+      <div class="kpi-value" id="kpi-tech-count">–</div>
+      <div class="kpi-label">Techniciens actifs</div>
+      <div class="kpi-period">Ayant traité ≥ 1 ticket</div>
+    </div>
+  </div>
+
+  <!-- Main layout : table + sidebar -->
+  <div class="tech-layout">
+
+    <!-- Table de performance -->
+    <div>
+      <div class="section-title">Tableau de performance</div>
+      <div class="perf-table-wrap">
+        <div class="perf-table-header">
+          <span>#</span>
+          <span>Technicien</span>
+          <span>Total fermés</span>
+          <span id="period-col-label">Ce mois</span>
+          <span>En cours</span>
+          <span>Moy. résol.</span>
+          <span>Charge</span>
+        </div>
+        <div id="perf-table-body">
+          <div class="loading-row">Chargement en cours…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar-panels">
+
+      <!-- Distribution -->
+      <div class="dist-panel">
+        <div class="dist-panel-title">Répartition sur la période</div>
+        <div id="dist-list">
+          <div class="loading-row" style="padding:12px 0">–</div>
+        </div>
+      </div>
+
+      <!-- Trend chart -->
+      <div class="trend-panel">
+        <div class="trend-panel-title">Tickets fermés – 12 derniers mois</div>
+        <div class="sparkline-wrap">
+          <canvas id="chart-monthly"></canvas>
+        </div>
+        <div class="chart-labels" id="chart-labels"></div>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<!-- Footer -->
+<footer class="text-center py-4 mt-2">
+  <small style="color:#555">© 2026 · Centre d'assistance – Méthodes Logistiques</small>
+</footer>
+
+<!-- Toast -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
+    <div class="toast-header">
+      <strong class="me-auto">Performance</strong>
+      <small>Info</small>
+      <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Fermer"></button>
+    </div>
+    <div id="toast-body" class="toast-body">Message…</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script type="module" src="assets/js/stats-tech.js"></script>
+</body>
+</html>

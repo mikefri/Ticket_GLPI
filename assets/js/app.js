@@ -13,14 +13,16 @@ function setText(el, text){ if (el) el.textContent = text ?? ''; }
 function show(el, yes = true){ if (el) el.classList.toggle('d-none', !yes); }
 
 /* ============= Références (si absentes sur la page, le code ignore) ============= */
-const elUser    = $('user-display');
-const btnLogin  = $('btn-login');
-const btnLogout = $('btn-logout');
-const navAdmin  = $('nav-admin');   // <li id="nav-admin" class="d-none">...</li>
-const navStats  = $('nav-stats');   // <li id="nav-stats" class="d-none">...</li> (optionnel)
+const elUser        = $('user-display');
+const btnLogin      = $('btn-login');
+const btnLogout     = $('btn-logout');
+const navAdmin      = $('nav-admin');       // <li id="nav-admin" class="d-none">...</li>
+const navStats      = $('nav-stats');       // <li id="nav-stats" class="d-none">...</li>
+const navStatsTech  = $('nav-stats-tech');  // <li id="nav-stats-tech" class="d-none">...</li>
+const navUsers      = $('nav-users');       // <li id="nav-users" class="d-none">...</li>
 
-const avatar    = $('avatar');      // <div id="avatar" class="avatar-circle d-none"></div>
-const badge     = $('badge-admin'); // <span id="badge-admin" class="badge ... d-none">Admin</span>
+const avatar        = $('avatar');          // <div id="avatar" class="avatar-circle d-none"></div>
+const badge         = $('badge-admin');     // <span id="badge-admin" class="badge ... d-none">Admin</span>
 
 /* ============= Helpers exportés ============= */
 export function badgeForStatus(status) {
@@ -44,7 +46,6 @@ export function toast(message) {
   if (el && window.bootstrap?.Toast) {
     new bootstrap.Toast(el).show();
   } else {
-    // Fallback console si pas de toast dans la page
     console.log('[toast]', message);
   }
 }
@@ -70,12 +71,14 @@ async function isUserAdmin(uid) {
 }
 
 function setAdminUI(isAdmin) {
-  // Affiche/masque : lien "Administration", lien "Statistiques" et badge
+  // Affiche/masque : lien "Administration", "Statistiques", "Statistiques Tech", "Utilisateurs & Rôles" et badge
   show(navAdmin, !!isAdmin);
-  if (navStats) show(navStats, !!isAdmin);
-  if (badge)    badge.classList.toggle('d-none', !isAdmin);
+  if (navStats)     show(navStats, !!isAdmin);
+  if (navStatsTech) show(navStatsTech, !!isAdmin);
+  if (navUsers)     show(navUsers, !!isAdmin);
+  if (badge)        badge.classList.toggle('d-none', !isAdmin);
 
-  // Expose un flag global si certaines pages veulent conditionner l’UI côté client
+  // Expose un flag global si certaines pages veulent conditionner l'UI côté client
   window.__isAdmin = !!isAdmin;
 }
 
@@ -86,7 +89,9 @@ onAuthStateChanged(auth, async (user) => {
   show(btnLogin, true);
   show(btnLogout, false);
   show(navAdmin, false);
-  if (navStats) show(navStats, false);
+  if (navStats)     show(navStats, false);
+  if (navStatsTech) show(navStatsTech, false);
+  if (navUsers)     show(navUsers, false);
   show(avatar, false);
   if (badge) badge.classList.add('d-none');
   window.__isAdmin = false;

@@ -1,10 +1,9 @@
 // assets/js/create-ticket.js
 import { db, auth } from './firebase-init.js';
 import { requireAuth, toast } from './app.js';
-import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-/* --- Catégories par défaut (tu me donneras les listes finales plus tard) --- */
-
+/* --- Catégories par défaut --- */
 const CATEGORY_MAP = {
   "Demande": [
     "Initialisation pasword RFX",
@@ -21,7 +20,6 @@ const CATEGORY_MAP = {
     "Autre"
   ]
 };
-
 
 /* --- Matrice SLA : Impact × Urgence -> Priorité + délai cible --- */
 const ORDER = { "Faible":1, "Moyen":2, "Fort":3, "Critique":4 };
@@ -63,7 +61,7 @@ function fillCategories(type) {
 radios.forEach(r => {
   r.addEventListener('change', () => {
     const type = r.value;
-    if (typeHidden) typeHidden.value = type;     // ✅ pas de ?.
+    if (typeHidden) typeHidden.value = type;
     fillCategories(type);
     if (formCard) {
       formCard.classList.remove('d-none');
@@ -83,7 +81,37 @@ impactEl?.addEventListener('change', refreshPriority);
 urgencyEl?.addEventListener('change', refreshPriority);
 refreshPriority();
 
-/* --- 3) Auth requise --- */
+/* --- 3) Autocomplete "Nom complet" depuis Firestore --- */
+async function initUserAutocomplete() {
+  try {
+    const snap = await getDocs(collection(db, 'users'));
+    const names = [];
+    snap.forEach(d => {
+      const name = d.data().displayName;
+      if (name) names.push(name);
+    });
+
+    // Créer et injecter le datalist
+    const datalist = document.createElement('datalist');
+    datalist.id = 'users-list';
+    names.sort().forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      datalist.appendChild(opt);
+    });
+    document.body.appendChild(datalist);
+
+    // Lier au champ input
+    const userNameInput = document.getElementById('userName');
+    if (userNameInput) {
+      userNameInput.setAttribute('list', 'users-list');
+    }
+  } catch (err) {
+    console.error('[autocomplete] Erreur chargement users:', err);
+  }
+}
+
+/* --- 4) Auth requise + init autocomplete --- */
 (async () => {
   const user = await requireAuth(true);
   if (!user) {
@@ -92,9 +120,31 @@ refreshPriority();
     if (submitBtn) submitBtn.disabled = true;
     return;
   }
+
+  // Activer l'autocomplete
+  await initUserAutocomplete();
+
+  // Pré-remplir avec le nom du user connecté
+  const userNameInput = document.getElementById('userName');
+  if (userNameInput) {
+    if (user.displayName) {
+      userNameInput.value = user.displayName;
+    } else {
+      // Fallback : chercher dans Firestore
+      try {
+        const { getDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (snap.exists() && snap.data().displayName) {
+          userNameInput.value = snap.data().displayName;
+        }
+      } catch (err) {
+        console.error('[prefill] Erreur Firestore:', err);
+      }
+    }
+  }
 })();
 
-/* --- 4) Soumission --- */
+/* --- 5) Soumission --- */
 form?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const user = auth.currentUser;
@@ -109,7 +159,6 @@ form?.addEventListener('submit', async (e) => {
     return;
   }
 
-  // Validation du champ userName
   const userNameValue = document.getElementById('userName')?.value.trim();
   if (!userNameValue) {
     toast('Veuillez saisir votre nom complet.');
@@ -117,21 +166,19 @@ form?.addEventListener('submit', async (e) => {
   }
 
   const payload = {
-    title: document.getElementById('title').value.trim(),
-    description: document.getElementById('description').value.trim(),
-    userName: userNameValue,  // ✅ Nom complet de l'utilisateur
-    category: categoryEl.value,
-    type: typeHidden.value,
-
-    impact: impactEl.value,
-    urgency: urgencyEl.value,
-    priority: priorityEl.value,
+    title:        document.getElementById('title').value.trim(),
+    description:  document.getElementById('description').value.trim(),
+    userName:     userNameValue,
+    category:     categoryEl.value,
+    type:         typeHidden.value,
+    impact:       impactEl.value,
+    urgency:      urgencyEl.value,
+    priority:     priorityEl.value,
     slaTargetHours: SLA_BY_PRIORITY[priorityEl.value] || 24,
-
-    status: 'Ouvert',
-    createdAt: serverTimestamp(),
-    createdBy: user.uid,
-    email: user.email || 'unknown@local'
+    status:       'Ouvert',
+    createdAt:    serverTimestamp(),
+    createdBy:    user.uid,
+    email:        user.email || 'unknown@local'
   };
 
   try {
@@ -141,7 +188,7 @@ form?.addEventListener('submit', async (e) => {
     form.reset();
     if (priorityEl) priorityEl.value = 'Normal';
     if (slaEl) slaEl.textContent = '24 h';
-    if (typeHidden) typeHidden.value = '';      // ✅ pas de ?.
+    if (typeHidden) typeHidden.value = '';
     if (categoryEl) categoryEl.innerHTML = '<option value="">Choisir…</option>';
     document.querySelectorAll('input[name="ttype"]').forEach(x => { x.checked = false; });
     if (formCard) formCard.classList.add('d-none');

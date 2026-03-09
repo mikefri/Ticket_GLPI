@@ -29,7 +29,7 @@ let modalDelete = null;
 let modalEdit = null;
 let currentEditId = null;
 
-// ── NOUVEAU : état modal affectation ──
+// ── État modal affectation ──
 let modalAssign = null;
 let currentAssignId = null;
 let allUsers = [];      // cache [{uid, name, role}]
@@ -45,6 +45,20 @@ const PRIORITY_ORDER = { 'Critique': 0, 'Haute': 1, 'Moyenne': 2, 'Basse': 3 };
 // ────────────────────────────────────────────────
 function show(el, yes = true) {
   if (el) el.classList.toggle('d-none', !yes);
+}
+
+/**
+ * Échappe le HTML puis transforme les URLs en liens cliquables.
+ */
+function linkify(text) {
+  const escaped = (text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+  return escaped.replace(
+    /(https?:\/\/[^\s<"]+)/g,
+    '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>'
+  );
 }
 
 async function isUserAdmin(uid) {
@@ -118,7 +132,6 @@ function renderItem(d) {
   // Bandeau vert "Pris en charge" OU "Affecté à"
   let takenInfo = '';
   if (t.assignedTo) {
-    // Affectation manuelle (priorité sur takenBy)
     takenInfo = `<div class="text-success small mt-1">
       <i class="bi bi-person-fill-check me-1"></i>
       Affecté à <strong>${t.assignedTo}</strong>
@@ -172,7 +185,7 @@ function renderItem(d) {
           ${deleteBtn}
         </div>
       </div>
-      <p class="card-text mt-2">${(t.description||'').replace(/</g,'&lt;')}</p>
+      <p class="card-text mt-2">${linkify(t.description)}</p>
       ${historyBtn}
     </div>
   </div>`;
@@ -246,8 +259,15 @@ elList.addEventListener('change', async (e) => {
 
   try {
     const ticketRef    = doc(db, 'tickets', id);
-    const historyEntry = { field: 'status', oldValue: oldStatus, newValue: newStatus, changedBy, changedByUid: currentUser.uid, changedAt: serverTimestamp() };
-    const updateData   = { status: newStatus };
+    const historyEntry = {
+      field: 'status',
+      oldValue: oldStatus,
+      newValue: newStatus,
+      changedBy,
+      changedByUid: currentUser.uid,
+      changedAt: serverTimestamp()
+    };
+    const updateData = { status: newStatus };
 
     if (oldStatus === 'Ouvert' && newStatus === 'En cours') {
       updateData.takenBy    = changedBy;
@@ -288,7 +308,10 @@ elList.addEventListener('click', async (e) => {
     document.getElementById('edit-priority').value    = t.priority    || 'Moyenne';
     if (!modalEdit) modalEdit = new bootstrap.Modal(document.getElementById('editModal'));
     modalEdit.show();
-  } catch (err) { console.error('[load ticket for edit]', err); toast('Erreur chargement du ticket'); }
+  } catch (err) {
+    console.error('[load ticket for edit]', err);
+    toast('Erreur chargement du ticket');
+  }
 });
 
 document.getElementById('btn-save-edit')?.addEventListener('click', async () => {
@@ -317,20 +340,34 @@ document.getElementById('btn-save-edit')?.addEventListener('click', async () => 
       { key: 'priority',    oldVal: oldData.priority,    newVal: newPriority },
     ];
 
-    await updateDoc(ticketRef, { title: newTitle, description: newDescription, category: newCategory, type: newType, priority: newPriority, updatedAt: serverTimestamp() });
+    await updateDoc(ticketRef, {
+      title: newTitle,
+      description: newDescription,
+      category: newCategory,
+      type: newType,
+      priority: newPriority,
+      updatedAt: serverTimestamp()
+    });
 
     for (const f of fields) {
       if (f.oldVal !== f.newVal) {
         await addDoc(collection(ticketRef, 'history'), {
-          field: f.key, oldValue: f.oldVal, newValue: f.newVal,
-          changedBy, changedByUid: currentUser.uid, changedAt: serverTimestamp()
+          field: f.key,
+          oldValue: f.oldVal,
+          newValue: f.newVal,
+          changedBy,
+          changedByUid: currentUser.uid,
+          changedAt: serverTimestamp()
         });
       }
     }
     toast('Ticket modifié avec succès');
     modalEdit?.hide();
     currentEditId = null;
-  } catch (err) { console.error('[save edit]', err); toast('Échec de la modification'); }
+  } catch (err) {
+    console.error('[save edit]', err);
+    toast('Échec de la modification');
+  }
 });
 
 // Suppression
@@ -349,8 +386,13 @@ document.getElementById('btn-confirm-delete')?.addEventListener('click', async (
     await deleteCollection(collection(ticketRef, 'history'));
     await deleteDoc(ticketRef);
     toast('Ticket et historique supprimés');
-  } catch (e) { console.error('[delete ticket]', e); toast('Échec suppression'); }
-  finally { pendingDeleteId = null; modalDelete?.hide(); }
+  } catch (e) {
+    console.error('[delete ticket]', e);
+    toast('Échec suppression');
+  } finally {
+    pendingDeleteId = null;
+    modalDelete?.hide();
+  }
 });
 
 // Historique
@@ -369,12 +411,18 @@ elList.addEventListener('click', async (e) => {
     const q    = query(collection(db, 'tickets', ticketId, 'history'), orderBy('changedAt', 'desc'));
     const snap = await getDocs(q);
 
-    if (snap.empty) { content.innerHTML = '<p class="text-muted text-center py-3">Aucun changement enregistré.</p>'; return; }
+    if (snap.empty) {
+      content.innerHTML = '<p class="text-muted text-center py-3">Aucun changement enregistré.</p>';
+      return;
+    }
 
     let html = '';
     snap.forEach(ds => {
       const h    = ds.data();
-      const date = h.changedAt ? formatDate(h.changedAt.toDate ? h.changedAt.toDate() : new Date(h.changedAt)) : '?';
+      const date = h.changedAt
+        ? formatDate(h.changedAt.toDate ? h.changedAt.toDate() : new Date(h.changedAt))
+        : '?';
+
       let changeDisplay = '';
       if (h.field === 'title' || h.field === 'description') {
         changeDisplay = `<div class="mt-1"><small class="text-muted">Champ modifié : <strong>${h.field === 'title' ? 'Titre' : 'Description'}</strong></small></div>`;
@@ -382,9 +430,10 @@ elList.addEventListener('click', async (e) => {
         changeDisplay = `<div class="mt-1">
           ${h.oldValue ? `<span class="badge bg-secondary me-2">${h.oldValue}</span>` : '(nouveau)'}
           <i class="bi bi-arrow-right mx-2"></i>
-          <span class="badge bg-primary">${h.newValue}</span>
+          <span class="badge bg-primary">${h.newValue ?? '(retiré)'}</span>
         </div>`;
       }
+
       html += `<div class="list-group-item">
         <div class="d-flex justify-content-between">
           <strong>${h.changedBy || 'Admin'}</strong>
@@ -394,11 +443,14 @@ elList.addEventListener('click', async (e) => {
       </div>`;
     });
     content.innerHTML = html;
-  } catch (err) { console.error('[load history]', err); content.innerHTML = '<div class="alert alert-danger">Erreur chargement historique</div>'; }
+  } catch (err) {
+    console.error('[load history]', err);
+    content.innerHTML = '<div class="alert alert-danger">Erreur chargement historique</div>';
+  }
 });
 
 // ════════════════════════════════════════════════
-//  NOUVEAU : Affectation d'un ticket
+//  Affectation d'un ticket
 // ════════════════════════════════════════════════
 
 /**
@@ -490,7 +542,6 @@ elList.addEventListener('click', async (e) => {
     const snap = await getDoc(doc(db, 'tickets', currentAssignId));
     if (snap.exists()) {
       currentAssignedUid = snap.data().assignedToUid || null;
-      // Afficher le bouton "Retirer" seulement si déjà assigné
       show(document.getElementById('assign-unassign-wrap'), !!snap.data().assignedTo);
     }
   } catch (err) { console.warn('[assign] getDoc', err); }
@@ -544,12 +595,12 @@ document.getElementById('assign-user-list')?.addEventListener('click', async (e)
       assignedByUid: currentUser?.uid || null,
     });
     await addDoc(collection(ticketRef, 'history'), {
-      field:         'assignedTo',
-      oldValue:      null,
-      newValue:      name,
+      field:        'assignedTo',
+      oldValue:     null,
+      newValue:     name,
       changedBy,
-      changedByUid:  currentUser?.uid || null,
-      changedAt:     serverTimestamp()
+      changedByUid: currentUser?.uid || null,
+      changedAt:    serverTimestamp()
     });
 
     toast(`Ticket affecté à ${name}`);
@@ -581,12 +632,12 @@ document.getElementById('btn-unassign')?.addEventListener('click', async () => {
       assignedByUid: null,
     });
     await addDoc(collection(ticketRef, 'history'), {
-      field:         'assignedTo',
-      oldValue:      oldName,
-      newValue:      null,
+      field:        'assignedTo',
+      oldValue:     oldName,
+      newValue:     null,
       changedBy,
-      changedByUid:  currentUser?.uid || null,
-      changedAt:     serverTimestamp()
+      changedByUid: currentUser?.uid || null,
+      changedAt:    serverTimestamp()
     });
 
     toast('Affectation retirée');
@@ -612,9 +663,15 @@ document.getElementById('btn-unassign')?.addEventListener('click', async () => {
     return;
   }
 
+  window.__isAdmin = true;
+
   onSnapshot(
     query(collection(db, 'tickets'), orderBy('createdAt', 'desc')),
     snap => { data = snap.docs; refreshList(); },
-    err  => { console.error('[tickets snapshot]', err); toast('Erreur chargement tickets'); show(elEmpty, true); }
+    err  => {
+      console.error('[tickets snapshot]', err);
+      toast('Erreur chargement tickets');
+      show(elEmpty, true);
+    }
   );
 })();

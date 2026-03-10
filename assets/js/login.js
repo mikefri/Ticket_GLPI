@@ -61,7 +61,7 @@ async function ensureUserDoc(user, fallbackEmail = '') {
 
 // --- Redirection vers tickets.html dans tous les cas ---
 async function redirectAfterSignIn(uid) {
-  window.location.replace('tickets.html');
+  window.location.replace('index.html');
 }
 
 // --- Compléter la connexion par lien e‑mail (si présent) ---

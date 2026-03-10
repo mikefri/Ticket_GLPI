@@ -18,7 +18,7 @@ import {
 // --- Références DOM & helpers UI ---
 const form       = document.getElementById('form-login');
 const btnLogin   = document.getElementById('btn-login') || document.querySelector('button[type="submit"]');
-const btnRegister= document.getElementById('btn-register'); // optionnel
+const btnRegister= document.getElementById('btn-register');
 const elStatus   = document.getElementById('login-status');
 const elBanner   = document.getElementById('email-link-banner');
 
@@ -59,16 +59,9 @@ async function ensureUserDoc(user, fallbackEmail = '') {
   }
 }
 
-// --- Redirection selon rôle ---
+// --- Redirection vers tickets.html dans tous les cas ---
 async function redirectAfterSignIn(uid) {
-  try {
-    const adminSnap = await getDoc(doc(db, 'admins', uid));
-    if (adminSnap.exists()) window.location.replace('users.html');
-    else                    window.location.replace('tickets.html');
-  } catch (e) {
-    console.error('[login] redirect check error:', e);
-    window.location.replace('tickets.html');
-  }
+  window.location.replace('tickets.html');
 }
 
 // --- Compléter la connexion par lien e‑mail (si présent) ---
@@ -96,7 +89,7 @@ async function completeEmailLinkIfNeeded() {
   }
 }
 
-// ▶️ Démarrage : tenter d’abord de compléter un lien e‑mail
+// ▶️ Démarrage : tenter d'abord de compléter un lien e‑mail
 completeEmailLinkIfNeeded().catch(console.error);
 
 // 👤 Si déjà connecté : redirection selon rôle

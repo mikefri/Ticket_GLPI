@@ -1,488 +1,102 @@
-// assets/js/ticket-detail.js
-// Page de détail d'un ticket avec système de chat
+/* =============================================
+   CHAT – Actions sur les bulles (édition / suppression)
+   À ajouter dans votre assets/css/styles.css
+   ============================================= */
 
-import './app.js';
-import { db } from './firebase-init.js';
-import { requireAuth, toast, badgeForStatus, badgeForPriority, formatDate } from './app.js';
-
-import {
-  doc, getDoc, updateDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-let currentTicket = null;
-let currentUser = null;
-let isAdmin = false;
-let unsubscribeComments = null; // Pour gérer le listener
-
-// Récupérer l'ID du ticket depuis l'URL
-function getTicketIdFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('id');
+/* Conteneur de la bulle : position relative pour ancrer les actions */
+.chat-bubble {
+  position: relative;
 }
 
-// Charger le ticket
-async function loadTicket(ticketId) {
-  console.log('[ticket-detail] Chargement du ticket:', ticketId);
-  
-  try {
-    const ticketRef = doc(db, 'tickets', ticketId);
-    const ticketSnap = await getDoc(ticketRef);
-    
-    if (!ticketSnap.exists()) {
-      showError('Ticket introuvable');
-      return;
-    }
-    
-    currentTicket = { id: ticketSnap.id, ...ticketSnap.data() };
-    console.log('[ticket-detail] Ticket chargé:', currentTicket);
-    
-    displayTicket(currentTicket);
-    
-    // Charger les commentaires APRÈS avoir vérifié currentUser
-    if (currentUser) {
-      loadComments(ticketId);
-    } else {
-      console.error('[ticket-detail] currentUser non défini !');
-    }
-    
-  } catch (error) {
-    console.error('[ticket-detail] Erreur de chargement:', error);
-    showError('Erreur lors du chargement du ticket: ' + error.message);
-  }
+/* Boutons d'action (crayon + poubelle) — cachés par défaut */
+.chat-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  z-index: 10;
 }
 
-// Afficher le ticket
-function displayTicket(ticket) {
-  document.getElementById('loading').classList.add('d-none');
-  document.getElementById('ticket-content').classList.remove('d-none');
-  
-  document.getElementById('ticket-title').textContent = ticket.title || 'Sans titre';
-  document.getElementById('ticket-id').textContent = ticket.id;
-  
-  const badgesDiv = document.getElementById('ticket-badges');
-  badgesDiv.innerHTML = `
-    ${badgeForStatus(ticket.status)}
-    ${badgeForPriority(ticket.priority)}
-  `;
-  
-  document.getElementById('ticket-created').textContent = formatDate(ticket.createdAt);
-  document.getElementById('ticket-updated').textContent = formatDate(ticket.updatedAt || ticket.createdAt);
-  
-  document.getElementById('requester-name').textContent = ticket.userName || 'Utilisateur inconnu';
-  
-  document.getElementById('ticket-category').textContent = ticket.category || 'Non spécifiée';
-  const typeSpan = document.getElementById('ticket-type');
-  if (ticket.type) {
-    typeSpan.textContent = ' • ' + ticket.type;
-  }
-  
-  const assignedName = ticket.takenBy || ticket.assignedTo || 'Non assigné';
-  document.getElementById('assigned-name').textContent = assignedName;
-
-  // Utiliser linkify pour rendre les URLs cliquables dans la description
-  const descriptionEl = document.getElementById('ticket-description');
-  descriptionEl.innerHTML = linkify(ticket.description) || 'Aucune description fournie.';
-  
-  if (ticket.attachments && ticket.attachments.length > 0) {
-    displayAttachments(ticket.attachments);
-  }
-  
-  if (isAdmin) {
-    displayAdminActions(ticket);
-  }
+/* Afficher les actions au survol de la bulle */
+.chat-bubble:hover .chat-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
-// Afficher les pièces jointes
-function displayAttachments(attachments) {
-  const section = document.getElementById('attachments-section');
-  const list = document.getElementById('attachments-list');
-  
-  section.style.display = 'block';
-  list.innerHTML = '';
-  
-  attachments.forEach(att => {
-    const item = document.createElement('div');
-    item.className = 'attachment-item';
-    item.innerHTML = `
-      <i class="bi bi-file-earmark-text attachment-icon"></i>
-      <div class="flex-grow-1">
-        <div class="fw-medium">${att.name || 'Fichier'}</div>
-        <small class="text-muted">${att.size || ''}</small>
-      </div>
-      <a href="${att.url}" target="_blank" class="btn btn-sm btn-outline-primary">
-        <i class="bi bi-download"></i> Télécharger
-      </a>
-    `;
-    list.appendChild(item);
-  });
+/* Style du bouton d'action */
+.btn-chat-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #555;
+  transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.1s;
+  backdrop-filter: blur(4px);
+  line-height: 1;
 }
 
-// Afficher les actions admin
-function displayAdminActions(ticket) {
-  const actionsSection = document.getElementById('admin-actions');
-  actionsSection.classList.remove('d-none');
-  
-  const btnTake = document.getElementById('btn-take-ticket');
-  const btnResolve = document.getElementById('btn-resolve-ticket');
-  const btnProgress = document.getElementById('btn-progress-ticket');
-  const btnClose = document.getElementById('btn-close-ticket');
-  
-  if (ticket.status === 'Résolu' || ticket.status === 'Fermé') {
-    btnTake.disabled = true;
-    btnResolve.disabled = true;
-    btnProgress.disabled = true;
-  }
-  
-  if (ticket.status === 'Fermé') {
-    btnClose.disabled = true;
-  }
-  
-  btnTake.onclick = () => takeTicket();
-  btnResolve.onclick = () => updateTicketStatus('Résolu');
-  btnProgress.onclick = () => updateTicketStatus('En attente');
-  btnClose.onclick = () => closeTicket();
+.btn-chat-action:hover {
+  background: #fff;
+  transform: scale(1.1);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
 
-// Prendre en charge un ticket
-async function takeTicket() {
-  if (!currentTicket || !currentUser) return;
-  
-  try {
-    const ticketRef = doc(db, 'tickets', currentTicket.id);
-    const userName = currentUser.displayName || currentUser.email;
-    
-    await updateDoc(ticketRef, {
-      status: 'En cours',
-      takenBy: userName,
-      takenByUid: currentUser.uid,
-      updatedAt: Timestamp.now()
-    });
-    
-    toast('Ticket pris en charge avec succès');
-    await loadTicket(currentTicket.id);
-    
-  } catch (error) {
-    console.error('[ticket-detail] Erreur prise en charge:', error);
-    toast('Erreur lors de la prise en charge: ' + error.message);
-  }
+/* Crayon → bleu au survol */
+.btn-chat-edit:hover {
+  color: #0d6efd;
+  border-color: #0d6efd;
 }
 
-// Mettre à jour le statut
-async function updateTicketStatus(newStatus) {
-  if (!currentTicket) return;
-  
-  try {
-    const ticketRef = doc(db, 'tickets', currentTicket.id);
-    
-    await updateDoc(ticketRef, {
-      status: newStatus,
-      updatedAt: Timestamp.now()
-    });
-    
-    toast(`Statut mis à jour : ${newStatus}`);
-    await loadTicket(currentTicket.id);
-    
-  } catch (error) {
-    console.error('[ticket-detail] Erreur mise à jour statut:', error);
-    toast('Erreur lors de la mise à jour: ' + error.message);
-  }
+/* Poubelle → rouge au survol */
+.btn-chat-delete:hover {
+  color: #dc3545 !important;
+  border-color: #dc3545;
 }
 
-// Fermer le ticket
-async function closeTicket() {
-  if (!currentTicket) return;
-  
-  if (!confirm('Êtes-vous sûr de vouloir fermer ce ticket ?')) {
-    return;
-  }
-  
-  try {
-    const ticketRef = doc(db, 'tickets', currentTicket.id);
-    
-    await updateDoc(ticketRef, {
-      status: 'Fermé',
-      closedAt: Timestamp.now(),
-      updatedAt: Timestamp.now()
-    });
-    
-    toast('Ticket fermé avec succès');
-    await loadTicket(currentTicket.id);
-    
-  } catch (error) {
-    console.error('[ticket-detail] Erreur fermeture:', error);
-    toast('Erreur lors de la fermeture: ' + error.message);
-  }
+/* Zone d'édition inline */
+.chat-edit-area {
+  margin-top: 6px;
 }
 
-// ===== SYSTÈME DE CHAT =====
-
-// Charger et afficher les commentaires en bulles de chat
-function loadComments(ticketId) {
-  console.log('[chat] Chargement des commentaires pour ticket:', ticketId);
-  
-  const chatContainer = document.getElementById('chat-messages');
-  if (!chatContainer) {
-    console.error('[chat] Element #chat-messages non trouvé !');
-    return;
-  }
-  
-  // Annuler l'ancien listener si présent
-  if (unsubscribeComments) {
-    unsubscribeComments();
-  }
-  
-  chatContainer.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Chargement des messages...</div>';
-  
-  try {
-    const commentsRef = collection(db, 'tickets', ticketId, 'comments');
-    const q = query(commentsRef, orderBy('createdAt', 'asc'));
-    
-    unsubscribeComments = onSnapshot(q, (snapshot) => {
-      console.log('[chat] Snapshot reçu, nb docs:', snapshot.size);
-      
-      chatContainer.innerHTML = '';
-      
-      if (snapshot.empty) {
-        chatContainer.innerHTML = `
-          <div class="text-center text-muted py-4">
-            <i class="bi bi-chat-dots fs-1 d-block mb-2"></i>
-            Aucun message pour le moment.<br>
-            <small>Soyez le premier à écrire !</small>
-          </div>
-        `;
-        return;
-      }
-      
-      snapshot.forEach((docSnap) => {
-        const comment = docSnap.data();
-        console.log('[chat] Message:', comment);
-        
-        const isCurrentUser = currentUser && comment.createdBy === currentUser.uid;
-        
-        const bubble = document.createElement('div');
-        bubble.className = `chat-message ${isCurrentUser ? 'user-message' : 'admin-message'}`;
-        
-        bubble.innerHTML = `
-          <div class="chat-bubble">
-            <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
-            <div class="chat-text">${linkify(comment.text || '')}</div>
-            <div class="chat-time">${formatCommentDate(comment.createdAt)}</div>
-          </div>
-        `;
-        
-        chatContainer.appendChild(bubble);
-      });
-      
-      // Auto-scroll vers le bas
-      chatContainer.scrollTop = chatContainer.scrollHeight;
-      
-    }, (error) => {
-      console.error('[chat] Erreur onSnapshot:', error);
-      chatContainer.innerHTML = `
-        <div class="alert alert-danger m-3">
-          <i class="bi bi-exclamation-triangle"></i> 
-          Erreur de chargement des messages: ${error.message}
-        </div>
-      `;
-    });
-    
-  } catch (error) {
-    console.error('[chat] Erreur création query:', error);
-    chatContainer.innerHTML = `
-      <div class="alert alert-danger m-3">
-        Erreur: ${error.message}
-      </div>
-    `;
-  }
+.chat-edit-area textarea {
+  font-size: 0.88em;
+  resize: none;
+  border-radius: 8px;
+  border: 1px solid #ced4da;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-// Formater la date des commentaires
-function formatCommentDate(timestamp) {
-  if (!timestamp) return '';
-  
-  try {
-    let date;
-    if (timestamp.toDate) {
-      date = timestamp.toDate();
-    } else if (timestamp.seconds) {
-      date = new Date(timestamp.seconds * 1000);
-    } else {
-      date = new Date(timestamp);
-    }
-    
-    return date.toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  } catch (e) {
-    console.error('[chat] Erreur formatage date:', e);
-    return '';
-  }
+.chat-edit-area textarea:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+  outline: none;
 }
 
-// Échapper le HTML (sécurité XSS)
-function escapeHtml(text) {
-  if (!text) return '';
-  const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  };
-  return String(text).replace(/[&<>"']/g, m => map[m]);
+/* Indicateur "(modifié)" après l'heure */
+.chat-edited-label {
+  font-size: 0.72em;
+  color: #999;
+  margin-left: 6px;
+  font-style: italic;
 }
 
-// Transformer les URLs en liens cliquables (après échappement XSS)
-function linkify(text) {
-  if (!text) return '';
-  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
-  return escapeHtml(text).replace(urlRegex, url =>
-    `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
-  );
+.chat-edited-label .bi {
+  font-size: 0.8em;
 }
 
-// Réinitialiser la hauteur du textarea
-function resetTextareaHeight() {
-  const textarea = document.getElementById('new-comment');
-  if (textarea) {
-    textarea.style.height = 'auto';
-    textarea.style.height = '90px'; // revenir à la hauteur minimale
-  }
+/* Sur les bulles de l'utilisateur courant (droite), adapter la couleur des actions */
+.user-message .btn-chat-action {
+  background: rgba(255, 255, 255, 0.85);
 }
-
-// Ajouter un commentaire
-async function addComment(text) {
-  console.log('[chat] Tentative ajout message:', text);
-  
-  if (!currentTicket) {
-    console.error('[chat] Pas de ticket courant');
-    toast('Erreur: ticket non chargé');
-    return;
-  }
-  
-  if (!currentUser) {
-    console.error('[chat] Pas d\'utilisateur connecté');
-    toast('Erreur: vous devez être connecté');
-    return;
-  }
-  
-  if (!text || text.trim() === '') {
-    toast('Le message ne peut pas être vide');
-    return;
-  }
-  
-  const btnSend = document.getElementById('btn-add-comment');
-  const textarea = document.getElementById('new-comment');
-  
-  try {
-    if (btnSend) {
-      btnSend.disabled = true;
-      btnSend.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-    }
-    
-    const commentsRef = collection(db, 'tickets', currentTicket.id, 'comments');
-    
-    await addDoc(commentsRef, {
-      text: text.trim(),
-      createdBy: currentUser.uid,
-      userName: currentUser.displayName || currentUser.email || 'Utilisateur',
-      createdAt: Timestamp.now()
-    });
-    
-    console.log('[chat] Message ajouté avec succès');
-    
-    // Vider le champ et réinitialiser sa hauteur
-    if (textarea) {
-      textarea.value = '';
-      resetTextareaHeight();
-    }
-    
-    // Mettre à jour la date de dernière modification du ticket
-    const ticketRef = doc(db, 'tickets', currentTicket.id);
-    await updateDoc(ticketRef, {
-      updatedAt: Timestamp.now()
-    });
-    
-  } catch (error) {
-    console.error('[chat] Erreur ajout message:', error);
-    toast('Erreur lors de l\'envoi: ' + error.message);
-  } finally {
-    if (btnSend) {
-      btnSend.disabled = false;
-      btnSend.innerHTML = '<i class="bi bi-send-fill"></i>';
-    }
-  }
-}
-
-// Afficher une erreur
-function showError(message) {
-  document.getElementById('loading').classList.add('d-none');
-  document.getElementById('error').classList.remove('d-none');
-  document.getElementById('error-message').textContent = message;
-}
-
-// ===== EVENT LISTENERS =====
-
-// Bouton envoyer
-document.getElementById('btn-add-comment')?.addEventListener('click', () => {
-  const textarea = document.getElementById('new-comment');
-  if (textarea) {
-    addComment(textarea.value);
-  }
-});
-
-// Entrée pour envoyer / Shift+Entrée pour saut de ligne
-document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    addComment(e.target.value);
-  }
-});
-
-// ===== AUTO-RESIZE DU TEXTAREA =====
-document.getElementById('new-comment')?.addEventListener('input', function () {
-  // Réinitialiser la hauteur pour recalculer
-  this.style.height = 'auto';
-  // Appliquer la hauteur du contenu, plafonnée à 200px
-  const newHeight = Math.min(this.scrollHeight, 200);
-  // Ne pas descendre sous la hauteur minimale
-  this.style.height = Math.max(newHeight, 90) + 'px';
-});
-
-// ===== INITIALISATION =====
-(async () => {
-  console.log('[ticket-detail] ===== INITIALISATION =====');
-  
-  const ticketId = getTicketIdFromUrl();
-  console.log('[ticket-detail] Ticket ID depuis URL:', ticketId);
-  
-  if (!ticketId) {
-    showError('Aucun ID de ticket fourni dans l\'URL');
-    return;
-  }
-  
-  // Authentification
-  const user = await requireAuth(true);
-  console.log('[ticket-detail] Utilisateur après requireAuth:', user);
-  
-  if (!user) {
-    showError('Vous devez être connecté pour voir ce ticket');
-    return;
-  }
-  
-  // IMPORTANT: définir currentUser AVANT de charger le ticket
-  currentUser = user;
-  isAdmin = window.__isAdmin === true;
-  
-  console.log('[ticket-detail] currentUser défini:', currentUser.email);
-  console.log('[ticket-detail] isAdmin:', isAdmin);
-  
-  // Charger le ticket
-  await loadTicket(ticketId);
-  
-  console.log('[ticket-detail] ===== INITIALISATION TERMINÉE =====');
-})();

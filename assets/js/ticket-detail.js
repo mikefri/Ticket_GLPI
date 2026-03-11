@@ -1,18 +1,18 @@
 // assets/js/ticket-detail.js
-// Page de détail d'un ticket avec système de chat
+// Page de détail d'un ticket avec système de chat (+ édition et suppression des messages)
 
 import './app.js';
 import { db } from './firebase-init.js';
 import { requireAuth, toast, badgeForStatus, badgeForPriority, formatDate } from './app.js';
 
 import {
-  doc, getDoc, updateDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp
+  doc, getDoc, updateDoc, deleteDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 let currentTicket = null;
 let currentUser = null;
 let isAdmin = false;
-let unsubscribeComments = null; // Pour gérer le listener
+let unsubscribeComments = null;
 
 // Récupérer l'ID du ticket depuis l'URL
 function getTicketIdFromUrl() {
@@ -38,7 +38,6 @@ async function loadTicket(ticketId) {
     
     displayTicket(currentTicket);
     
-    // Charger les commentaires APRÈS avoir vérifié currentUser
     if (currentUser) {
       loadComments(ticketId);
     } else {
@@ -79,7 +78,6 @@ function displayTicket(ticket) {
   const assignedName = ticket.takenBy || ticket.assignedTo || 'Non assigné';
   document.getElementById('assigned-name').textContent = assignedName;
 
-  // Utiliser linkify pour rendre les URLs cliquables dans la description
   const descriptionEl = document.getElementById('ticket-description');
   descriptionEl.innerHTML = linkify(ticket.description) || 'Aucune description fournie.';
   
@@ -122,10 +120,10 @@ function displayAdminActions(ticket) {
   const actionsSection = document.getElementById('admin-actions');
   actionsSection.classList.remove('d-none');
   
-  const btnTake = document.getElementById('btn-take-ticket');
-  const btnResolve = document.getElementById('btn-resolve-ticket');
+  const btnTake     = document.getElementById('btn-take-ticket');
+  const btnResolve  = document.getElementById('btn-resolve-ticket');
   const btnProgress = document.getElementById('btn-progress-ticket');
-  const btnClose = document.getElementById('btn-close-ticket');
+  const btnClose    = document.getElementById('btn-close-ticket');
   
   if (ticket.status === 'Résolu' || ticket.status === 'Fermé') {
     btnTake.disabled = true;
@@ -137,10 +135,10 @@ function displayAdminActions(ticket) {
     btnClose.disabled = true;
   }
   
-  btnTake.onclick = () => takeTicket();
-  btnResolve.onclick = () => updateTicketStatus('Résolu');
+  btnTake.onclick     = () => takeTicket();
+  btnResolve.onclick  = () => updateTicketStatus('Résolu');
   btnProgress.onclick = () => updateTicketStatus('En attente');
-  btnClose.onclick = () => closeTicket();
+  btnClose.onclick    = () => closeTicket();
 }
 
 // Prendre en charge un ticket
@@ -192,9 +190,7 @@ async function updateTicketStatus(newStatus) {
 async function closeTicket() {
   if (!currentTicket) return;
   
-  if (!confirm('Êtes-vous sûr de vouloir fermer ce ticket ?')) {
-    return;
-  }
+  if (!confirm('Êtes-vous sûr de vouloir fermer ce ticket ?')) return;
   
   try {
     const ticketRef = doc(db, 'tickets', currentTicket.id);
@@ -216,7 +212,6 @@ async function closeTicket() {
 
 // ===== SYSTÈME DE CHAT =====
 
-// Charger et afficher les commentaires en bulles de chat
 function loadComments(ticketId) {
   console.log('[chat] Chargement des commentaires pour ticket:', ticketId);
   
@@ -226,7 +221,6 @@ function loadComments(ticketId) {
     return;
   }
   
-  // Annuler l'ancien listener si présent
   if (unsubscribeComments) {
     unsubscribeComments();
   }
@@ -255,25 +249,117 @@ function loadComments(ticketId) {
       
       snapshot.forEach((docSnap) => {
         const comment = docSnap.data();
+        const commentId = docSnap.id;
         console.log('[chat] Message:', comment);
         
         const isCurrentUser = currentUser && comment.createdBy === currentUser.uid;
-        
+        const canAct = isCurrentUser || isAdmin;
+
+        const editedLabel = comment.editedAt
+          ? `<span class="chat-edited-label"><i class="bi bi-pencil"></i> modifié</span>`
+          : '';
+
         const bubble = document.createElement('div');
         bubble.className = `chat-message ${isCurrentUser ? 'user-message' : 'admin-message'}`;
         
         bubble.innerHTML = `
           <div class="chat-bubble">
+            ${canAct ? `
+              <div class="chat-actions">
+                <button class="btn-chat-action btn-chat-edit" title="Modifier">
+                  <i class="bi bi-pencil-fill"></i>
+                </button>
+                <button class="btn-chat-action btn-chat-delete" title="Supprimer">
+                  <i class="bi bi-trash-fill"></i>
+                </button>
+              </div>
+            ` : ''}
             <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
-            <div class="chat-text">${linkify(comment.text || '')}</div>
-            <div class="chat-time">${formatCommentDate(comment.createdAt)}</div>
+            <div class="chat-text" id="chat-text-${commentId}">${linkify(comment.text || '')}</div>
+            <div class="chat-edit-area d-none" id="chat-edit-${commentId}">
+              <textarea class="form-control form-control-sm mb-2" rows="2">${escapeHtml(comment.text || '')}</textarea>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-success btn-save-edit">
+                  <i class="bi bi-check-lg me-1"></i>Sauvegarder
+                </button>
+                <button class="btn btn-sm btn-secondary btn-cancel-edit">
+                  <i class="bi bi-x-lg me-1"></i>Annuler
+                </button>
+              </div>
+            </div>
+            <div class="chat-time">${formatCommentDate(comment.createdAt)}${editedLabel}</div>
           </div>
         `;
+
+        // Bouton Modifier : affiche le textarea d'édition
+        bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
+          document.getElementById(`chat-text-${commentId}`)?.classList.add('d-none');
+          const editArea = document.getElementById(`chat-edit-${commentId}`);
+          editArea?.classList.remove('d-none');
+          const ta = editArea?.querySelector('textarea');
+          if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
+        });
+
+        // Bouton Annuler
+        bubble.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {
+          document.getElementById(`chat-text-${commentId}`)?.classList.remove('d-none');
+          document.getElementById(`chat-edit-${commentId}`)?.classList.add('d-none');
+        });
+
+        // Bouton Sauvegarder
+        bubble.querySelector('.btn-save-edit')?.addEventListener('click', async () => {
+          const textarea = bubble.querySelector('.chat-edit-area textarea');
+          const newText = textarea?.value?.trim();
+          if (!newText) { toast('Le message ne peut pas être vide'); return; }
+
+          const saveBtn = bubble.querySelector('.btn-save-edit');
+          saveBtn.disabled = true;
+          saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+          try {
+            await updateDoc(doc(db, 'tickets', currentTicket.id, 'comments', commentId), {
+              text: newText,
+              editedAt: Timestamp.now()
+            });
+            await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
+            toast('Message modifié');
+            // onSnapshot met à jour l'affichage automatiquement
+          } catch (error) {
+            console.error('[chat] Erreur modification:', error);
+            toast('Erreur: ' + error.message);
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Sauvegarder';
+          }
+        });
+
+        // Entrée = sauvegarde, Escape = annuler dans le textarea d'édition
+        bubble.querySelector('.chat-edit-area textarea')?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            bubble.querySelector('.btn-save-edit')?.click();
+          }
+          if (e.key === 'Escape') {
+            bubble.querySelector('.btn-cancel-edit')?.click();
+          }
+        });
+
+        // Bouton Supprimer
+        bubble.querySelector('.btn-chat-delete')?.addEventListener('click', async () => {
+          if (!confirm('Supprimer ce message définitivement ?')) return;
+          try {
+            await deleteDoc(doc(db, 'tickets', currentTicket.id, 'comments', commentId));
+            await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
+            toast('Message supprimé');
+            // onSnapshot met à jour l'affichage automatiquement
+          } catch (error) {
+            console.error('[chat] Erreur suppression:', error);
+            toast('Erreur: ' + error.message);
+          }
+        });
         
         chatContainer.appendChild(bubble);
       });
       
-      // Auto-scroll vers le bas
       chatContainer.scrollTop = chatContainer.scrollHeight;
       
     }, (error) => {
@@ -296,10 +382,10 @@ function loadComments(ticketId) {
   }
 }
 
-// Formater la date des commentaires
+// ===== UTILITAIRES =====
+
 function formatCommentDate(timestamp) {
   if (!timestamp) return '';
-  
   try {
     let date;
     if (timestamp.toDate) {
@@ -309,13 +395,9 @@ function formatCommentDate(timestamp) {
     } else {
       date = new Date(timestamp);
     }
-    
     return date.toLocaleString('fr-FR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
   } catch (e) {
     console.error('[chat] Erreur formatage date:', e);
@@ -323,20 +405,12 @@ function formatCommentDate(timestamp) {
   }
 }
 
-// Échapper le HTML (sécurité XSS)
 function escapeHtml(text) {
   if (!text) return '';
-  const map = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;'
-  };
+  const map = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' };
   return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
-// Transformer les URLs en liens cliquables (après échappement XSS)
 function linkify(text) {
   if (!text) return '';
   const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
@@ -345,35 +419,20 @@ function linkify(text) {
   );
 }
 
-// Réinitialiser la hauteur du textarea
 function resetTextareaHeight() {
   const textarea = document.getElementById('new-comment');
   if (textarea) {
     textarea.style.height = 'auto';
-    textarea.style.height = '90px'; // revenir à la hauteur minimale
+    textarea.style.height = '90px';
   }
 }
 
-// Ajouter un commentaire
 async function addComment(text) {
   console.log('[chat] Tentative ajout message:', text);
   
-  if (!currentTicket) {
-    console.error('[chat] Pas de ticket courant');
-    toast('Erreur: ticket non chargé');
-    return;
-  }
-  
-  if (!currentUser) {
-    console.error('[chat] Pas d\'utilisateur connecté');
-    toast('Erreur: vous devez être connecté');
-    return;
-  }
-  
-  if (!text || text.trim() === '') {
-    toast('Le message ne peut pas être vide');
-    return;
-  }
+  if (!currentTicket) { toast('Erreur: ticket non chargé'); return; }
+  if (!currentUser)   { toast('Erreur: vous devez être connecté'); return; }
+  if (!text || text.trim() === '') { toast('Le message ne peut pas être vide'); return; }
   
   const btnSend = document.getElementById('btn-add-comment');
   const textarea = document.getElementById('new-comment');
@@ -384,9 +443,7 @@ async function addComment(text) {
       btnSend.innerHTML = '<i class="bi bi-hourglass-split"></i>';
     }
     
-    const commentsRef = collection(db, 'tickets', currentTicket.id, 'comments');
-    
-    await addDoc(commentsRef, {
+    await addDoc(collection(db, 'tickets', currentTicket.id, 'comments'), {
       text: text.trim(),
       createdBy: currentUser.uid,
       userName: currentUser.displayName || currentUser.email || 'Utilisateur',
@@ -394,18 +451,8 @@ async function addComment(text) {
     });
     
     console.log('[chat] Message ajouté avec succès');
-    
-    // Vider le champ et réinitialiser sa hauteur
-    if (textarea) {
-      textarea.value = '';
-      resetTextareaHeight();
-    }
-    
-    // Mettre à jour la date de dernière modification du ticket
-    const ticketRef = doc(db, 'tickets', currentTicket.id);
-    await updateDoc(ticketRef, {
-      updatedAt: Timestamp.now()
-    });
+    if (textarea) { textarea.value = ''; resetTextareaHeight(); }
+    await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
     
   } catch (error) {
     console.error('[chat] Erreur ajout message:', error);
@@ -418,7 +465,6 @@ async function addComment(text) {
   }
 }
 
-// Afficher une erreur
 function showError(message) {
   document.getElementById('loading').classList.add('d-none');
   document.getElementById('error').classList.remove('d-none');
@@ -427,15 +473,11 @@ function showError(message) {
 
 // ===== EVENT LISTENERS =====
 
-// Bouton envoyer
 document.getElementById('btn-add-comment')?.addEventListener('click', () => {
   const textarea = document.getElementById('new-comment');
-  if (textarea) {
-    addComment(textarea.value);
-  }
+  if (textarea) addComment(textarea.value);
 });
 
-// Entrée pour envoyer / Shift+Entrée pour saut de ligne
 document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -443,13 +485,9 @@ document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
   }
 });
 
-// ===== AUTO-RESIZE DU TEXTAREA =====
 document.getElementById('new-comment')?.addEventListener('input', function () {
-  // Réinitialiser la hauteur pour recalculer
   this.style.height = 'auto';
-  // Appliquer la hauteur du contenu, plafonnée à 200px
   const newHeight = Math.min(this.scrollHeight, 200);
-  // Ne pas descendre sous la hauteur minimale
   this.style.height = Math.max(newHeight, 90) + 'px';
 });
 
@@ -465,7 +503,6 @@ document.getElementById('new-comment')?.addEventListener('input', function () {
     return;
   }
   
-  // Authentification
   const user = await requireAuth(true);
   console.log('[ticket-detail] Utilisateur après requireAuth:', user);
   
@@ -474,14 +511,13 @@ document.getElementById('new-comment')?.addEventListener('input', function () {
     return;
   }
   
-  // IMPORTANT: définir currentUser AVANT de charger le ticket
+  // IMPORTANT : définir currentUser AVANT de charger le ticket
   currentUser = user;
   isAdmin = window.__isAdmin === true;
   
   console.log('[ticket-detail] currentUser défini:', currentUser.email);
   console.log('[ticket-detail] isAdmin:', isAdmin);
   
-  // Charger le ticket
   await loadTicket(ticketId);
   
   console.log('[ticket-detail] ===== INITIALISATION TERMINÉE =====');

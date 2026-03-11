@@ -78,8 +78,10 @@ function displayTicket(ticket) {
   
   const assignedName = ticket.takenBy || ticket.assignedTo || 'Non assigné';
   document.getElementById('assigned-name').textContent = assignedName;
-  
-  document.getElementById('ticket-description').textContent = ticket.description || 'Aucune description fournie.';
+
+  // Utiliser linkify pour rendre les URLs cliquables dans la description
+  const descriptionEl = document.getElementById('ticket-description');
+  descriptionEl.innerHTML = linkify(ticket.description) || 'Aucune description fournie.';
   
   if (ticket.attachments && ticket.attachments.length > 0) {
     displayAttachments(ticket.attachments);
@@ -263,7 +265,7 @@ function loadComments(ticketId) {
         bubble.innerHTML = `
           <div class="chat-bubble">
             <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
-            <div class="chat-text">${escapeHtml(comment.text || '')}</div>
+            <div class="chat-text">${linkify(comment.text || '')}</div>
             <div class="chat-time">${formatCommentDate(comment.createdAt)}</div>
           </div>
         `;
@@ -321,7 +323,7 @@ function formatCommentDate(timestamp) {
   }
 }
 
-// Échapper le HTML
+// Échapper le HTML (sécurité XSS)
 function escapeHtml(text) {
   if (!text) return '';
   const map = {
@@ -332,6 +334,15 @@ function escapeHtml(text) {
     "'": '&#039;'
   };
   return String(text).replace(/[&<>"']/g, m => map[m]);
+}
+
+// Transformer les URLs en liens cliquables (après échappement XSS)
+function linkify(text) {
+  if (!text) return '';
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+  return escapeHtml(text).replace(urlRegex, url =>
+    `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+  );
 }
 
 // Réinitialiser la hauteur du textarea

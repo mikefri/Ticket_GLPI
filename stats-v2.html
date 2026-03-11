@@ -75,7 +75,9 @@
             <div class="col-client">Client</div>
             <div class="col-days">Jours</div>
           </div>
-          <div class="stat-table-body" id="list-new"></div>
+          <div class="stat-table-body" id="list-new">
+            <!-- Rempli dynamiquement -->
+          </div>
         </div>
       </div>
     </div>
@@ -95,7 +97,9 @@
             <div class="col-tech">Technicien</div>
             <div class="col-days">Jours</div>
           </div>
-          <div class="stat-table-body" id="list-assigned"></div>
+          <div class="stat-table-body" id="list-assigned">
+            <!-- Rempli dynamiquement -->
+          </div>
         </div>
       </div>
     </div>
@@ -115,7 +119,9 @@
             <div class="col-tech">Technicien</div>
             <div class="col-days">Jours</div>
           </div>
-          <div class="stat-table-body" id="list-progress"></div>
+          <div class="stat-table-body" id="list-progress">
+            <!-- Rempli dynamiquement -->
+          </div>
         </div>
       </div>
     </div>
@@ -134,73 +140,41 @@
             <div class="col-label">Libellé</div>
             <div class="col-tech">Technicien</div>
           </div>
-          <div class="stat-table-body" id="list-solved"></div>
+          <div class="stat-table-body" id="list-solved">
+            <!-- Rempli dynamiquement -->
+          </div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- Indicateurs du bas -->
-  <div class="stat-footer" style="flex-direction: column; gap: 0.4rem;">
-
-    <!-- Ouverts -->
-    <div class="d-flex align-items-center gap-2">
-      <div class="stat-footer-item">
-        <span class="stat-footer-label">Ouverts :</span>
-        <span class="stat-footer-value" id="footer-open-today">0</span>
-        <span class="stat-footer-period">aujourd'hui</span>
-        <span class="stat-footer-separator">|</span>
-      </div>
-      <div class="stat-footer-item">
-        <span class="stat-footer-value" id="footer-open-week">0</span>
-        <span class="stat-footer-period">cette semaine</span>
-        <span class="stat-footer-separator">|</span>
-      </div>
-      <div class="stat-footer-item">
-        <span class="stat-footer-value" id="footer-open-month">0</span>
-        <span class="stat-footer-period">ce mois</span>
-        <span class="stat-footer-separator">|</span>
-      </div>
-      <div class="stat-footer-item">
-        <span class="stat-footer-value" id="footer-open-year">0</span>
-        <span class="stat-footer-period">cette année</span>
-        <span class="stat-footer-separator">|</span>
-      </div>
-      <div class="stat-footer-item">
-        <span class="stat-footer-value" id="footer-open-total">0</span>
-        <span class="stat-footer-period">au total</span>
-      </div>
+  <div class="stat-footer">
+    <div class="stat-footer-item">
+      <span class="stat-footer-label">Clos :</span>
+      <span class="stat-footer-value" id="footer-closed-today">0</span>
+      <span class="stat-footer-period">aujourd'hui</span>
+      <span class="stat-footer-separator">|</span>
     </div>
-
-    <!-- Clos -->
-    <div class="d-flex align-items-center gap-2">
-      <div class="stat-footer-item">
-        <span class="stat-footer-label">Clos :</span>
-        <span class="stat-footer-value" id="footer-closed-today">0</span>
-        <span class="stat-footer-period">aujourd'hui</span>
-        <span class="stat-footer-separator">|</span>
-      </div>
-      <div class="stat-footer-item">
-        <span class="stat-footer-value" id="footer-closed-week">0</span>
-        <span class="stat-footer-period">cette semaine</span>
-        <span class="stat-footer-separator">|</span>
-      </div>
-      <div class="stat-footer-item">
-        <span class="stat-footer-value" id="footer-closed-month">0</span>
-        <span class="stat-footer-period">ce mois</span>
-        <span class="stat-footer-separator">|</span>
-      </div>
-      <div class="stat-footer-item">
-        <span class="stat-footer-value" id="footer-closed-year">0</span>
-        <span class="stat-footer-period">cette année</span>
-        <span class="stat-footer-separator">|</span>
-      </div>
-      <div class="stat-footer-item">
-        <span class="stat-footer-value" id="footer-closed-total">0</span>
-        <span class="stat-footer-period">au total</span>
-      </div>
+    <div class="stat-footer-item">
+      <span class="stat-footer-value" id="footer-closed-week">0</span>
+      <span class="stat-footer-period">cette semaine</span>
+      <span class="stat-footer-separator">|</span>
     </div>
-
+    <div class="stat-footer-item">
+      <span class="stat-footer-value" id="footer-closed-month">0</span>
+      <span class="stat-footer-period">ce mois</span>
+      <span class="stat-footer-separator">|</span>
+    </div>
+    <div class="stat-footer-item">
+      <span class="stat-footer-value" id="footer-closed-year">0</span>
+      <span class="stat-footer-period">cette année</span>
+      <span class="stat-footer-separator">|</span>
+    </div>
+    <div class="stat-footer-item">
+      <span class="stat-footer-value" id="footer-closed-total">0</span>
+      <span class="stat-footer-period">au total</span>
+    </div>
   </div>
 
 </main>
@@ -222,6 +196,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<!-- Module de page -->
 <script type="module" src="assets/js/stats-v2.js"></script>
 </body>
 </html>

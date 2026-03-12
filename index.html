@@ -174,8 +174,29 @@
           <textarea class="form-control" id="description" required rows="4" placeholder="Décrivez le besoin/le problème, le contexte, la localisation…"></textarea>
         </div>
 
+        <!-- ===== PIÈCE JOINTE (image) ===== -->
+        <div class="mt-3">
+          <label class="form-label">
+            <i class="bi bi-paperclip me-1"></i>Pièce jointe
+            <span class="text-muted small">(optionnel – JPG, PNG, GIF, WEBP – max 5 Mo)</span>
+          </label>
+          <input
+            type="file"
+            class="form-control"
+            id="attachment"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+          >
+          <!-- Aperçu de l'image sélectionnée -->
+          <div id="attachment-preview" class="mt-2 d-none d-flex align-items-center gap-2">
+            <img id="preview-img" src="" alt="Aperçu de la pièce jointe" class="img-thumbnail" style="max-height:150px; max-width:250px;">
+            <button type="button" class="btn btn-sm btn-outline-danger" id="btn-remove-attachment">
+              <i class="bi bi-x-lg me-1"></i>Supprimer
+            </button>
+          </div>
+        </div>
+
         <!-- SLA + Boutons -->
-        <div class="d-flex align-items-center justify-content-between mt-3">
+        <div class="d-flex align-items-center justify-content-between mt-4">
           <div class="text-muted small">
             Délai cible (SLA) : <strong id="sla-target">24 h</strong>
           </div>

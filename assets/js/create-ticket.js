@@ -1,8 +1,12 @@
 // assets/js/create-ticket.js
-import { db, auth, storage } from './firebase-init.js';
+import { db, auth } from './firebase-init.js';
 import { requireAuth, toast } from './app.js';
-import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+import { collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+/* --- Configuration Cloudinary --- */
+const CLOUDINARY_CLOUD_NAME = 'ddf1gxdms';
+const CLOUDINARY_UPLOAD_PRESET = 'tickets_upload';
+const CLOUDINARY_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
 /* --- Catégories par défaut --- */
 const CATEGORY_MAP = {
@@ -83,12 +87,25 @@ btnRemove?.addEventListener('click', () => {
   previewDiv?.classList.add('d-none');
 });
 
-/* --- Upload image vers Firebase Storage --- */
-async function uploadAttachment(file, ticketId) {
-  const fileName = `${Date.now()}_${file.name}`;
-  const storageRef = ref(storage, `tickets/${ticketId}/${fileName}`);
-  await uploadBytes(storageRef, file);
-  return await getDownloadURL(storageRef);
+/* --- Upload image vers Cloudinary --- */
+async function uploadToCloudinary(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  formData.append('folder', 'tickets');
+
+  const response = await fetch(CLOUDINARY_URL, {
+    method: 'POST',
+    body: formData
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(err?.error?.message || 'Erreur upload Cloudinary');
+  }
+
+  const data = await response.json();
+  return data.secure_url; // URL HTTPS de l'image
 }
 
 /* --- 1) Choix du type -> affichage formulaire + catégories --- */
@@ -147,9 +164,7 @@ async function initUserAutocomplete() {
     document.body.appendChild(datalist);
 
     const userNameInput = document.getElementById('userName');
-    if (userNameInput) {
-      userNameInput.setAttribute('list', 'users-list');
-    }
+    if (userNameInput) userNameInput.setAttribute('list', 'users-list');
   } catch (err) {
     console.error('[autocomplete] Erreur chargement users:', err);
   }
@@ -175,7 +190,6 @@ async function initUserAutocomplete() {
     } else {
       try {
         const snap = await getDocs(collection(db, 'users'));
-        // cherche le doc dont l'uid correspond
         snap.forEach(d => {
           if (d.id === user.uid && d.data().displayName) {
             userNameInput.value = d.data().displayName;
@@ -217,7 +231,21 @@ form?.addEventListener('submit', async (e) => {
   }
 
   try {
-    // Créer le ticket dans Firestore
+    // Upload image sur Cloudinary si présente
+    let attachmentURL = null;
+    const file = attachmentEl?.files[0];
+    if (file) {
+      try {
+        toast('Upload de l\'image en cours…');
+        attachmentURL = await uploadToCloudinary(file);
+      } catch (uploadErr) {
+        console.error('[upload] Erreur Cloudinary:', uploadErr);
+        toast('Erreur lors de l\'upload de l\'image : ' + uploadErr.message);
+        // On continue quand même sans l'image
+      }
+    }
+
+    // Créer le ticket dans Firestore avec l'URL Cloudinary
     const payload = {
       title:          document.getElementById('title').value.trim(),
       description:    document.getElementById('description').value.trim(),
@@ -232,22 +260,10 @@ form?.addEventListener('submit', async (e) => {
       createdAt:      serverTimestamp(),
       createdBy:      user.uid,
       email:          user.email || 'unknown@local',
-      attachmentURL:  null
+      attachmentURL:  attachmentURL  // null si pas d'image
     };
 
-    const docRef = await addDoc(collection(db, 'tickets'), payload);
-
-    // Upload image si présente
-    const file = attachmentEl?.files[0];
-    if (file) {
-      try {
-        const url = await uploadAttachment(file, docRef.id);
-        await updateDoc(doc(db, 'tickets', docRef.id), { attachmentURL: url });
-      } catch (uploadErr) {
-        console.error('[upload] Erreur upload image:', uploadErr);
-        toast('Ticket créé, mais erreur lors de l\'upload de l\'image.');
-      }
-    }
+    await addDoc(collection(db, 'tickets'), payload);
 
     // Reset UI
     form.reset();

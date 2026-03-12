@@ -7,22 +7,53 @@ import { auth, db } from './firebase-init.js';
 import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
+/* ============= AUTO-LOGOUT après 5h d'inactivité ============= */
+const INACTIVITY_LIMIT = 5 * 60 * 60 * 1000; // 5 heures en millisecondes
+let inactivityTimer = null;
+
+function resetInactivityTimer() {
+  // Annule le timer précédent et en recrée un nouveau
+  clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(async () => {
+    const u = auth.currentUser;
+    if (u) {
+      sessionStorage.removeItem(`isAdmin:${u.uid}`);
+      await signOut(auth);
+    }
+    window.location.href = 'login.html';
+  }, INACTIVITY_LIMIT);
+}
+
+function startInactivityWatcher() {
+  // Ces événements réinitialisent le compteur à chaque action utilisateur
+  ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'].forEach(event => {
+    window.addEventListener(event, resetInactivityTimer, { passive: true });
+  });
+  resetInactivityTimer(); // Démarre le premier timer
+}
+
+function stopInactivityWatcher() {
+  clearTimeout(inactivityTimer);
+  ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'].forEach(event => {
+    window.removeEventListener(event, resetInactivityTimer);
+  });
+}
+
 /* ============= Utilitaires DOM ============= */
 function $(id){ return document.getElementById(id); }
 function setText(el, text){ if (el) el.textContent = text ?? ''; }
 function show(el, yes = true){ if (el) el.classList.toggle('d-none', !yes); }
 
-/* ============= Références (si absentes sur la page, le code ignore) ============= */
+/* ============= Références ============= */
 const elUser        = $('user-display');
 const btnLogin      = $('btn-login');
 const btnLogout     = $('btn-logout');
-const navAdmin      = $('nav-admin');       // <li id="nav-admin" class="d-none">...</li>
-const navStats      = $('nav-stats');       // <li id="nav-stats" class="d-none">...</li>
-const navStatsTech  = $('nav-stats-tech');  // <li id="nav-stats-tech" class="d-none">...</li>
-const navUsers      = $('nav-users');       // <li id="nav-users" class="d-none">...</li>
-
-const avatar        = $('avatar');          // <div id="avatar" class="avatar-circle d-none"></div>
-const badge         = $('badge-admin');     // <span id="badge-admin" class="badge ... d-none">Admin</span>
+const navAdmin      = $('nav-admin');
+const navStats      = $('nav-stats');
+const navStatsTech  = $('nav-stats-tech');
+const navUsers      = $('nav-users');
+const avatar        = $('avatar');
+const badge         = $('badge-admin');
 
 /* ============= Helpers exportés ============= */
 export function badgeForStatus(status) {
@@ -59,7 +90,7 @@ export function requireAuth(redirect = true) {
   });
 }
 
-/* ============= Détection Admin (via /admins/{uid}) ============= */
+/* ============= Détection Admin ============= */
 async function isUserAdmin(uid) {
   try {
     const snap = await getDoc(doc(db, 'admins', uid));
@@ -71,20 +102,16 @@ async function isUserAdmin(uid) {
 }
 
 function setAdminUI(isAdmin) {
-  // Affiche/masque : lien "Administration", "Statistiques", "Statistiques Tech", "Utilisateurs & Rôles" et badge
   show(navAdmin, !!isAdmin);
   if (navStats)     show(navStats, !!isAdmin);
   if (navStatsTech) show(navStatsTech, !!isAdmin);
   if (navUsers)     show(navUsers, !!isAdmin);
   if (badge)        badge.classList.toggle('d-none', !isAdmin);
-
-  // Expose un flag global si certaines pages veulent conditionner l'UI côté client
   window.__isAdmin = !!isAdmin;
 }
 
 /* ============= Wiring Navbar / Badge ============= */
 onAuthStateChanged(auth, async (user) => {
-  // État par défaut (déconnecté)
   setText(elUser, '');
   show(btnLogin, true);
   show(btnLogout, false);
@@ -96,7 +123,10 @@ onAuthStateChanged(auth, async (user) => {
   if (badge) badge.classList.add('d-none');
   window.__isAdmin = false;
 
-  if (!user) return;
+  if (!user) {
+    stopInactivityWatcher(); // ← Arrête le timer si déconnecté
+    return;
+  }
 
   // Identité
   const label = user.email || user.displayName || user.uid;
@@ -104,14 +134,14 @@ onAuthStateChanged(auth, async (user) => {
   show(btnLogin, false);
   show(btnLogout, true);
 
-  // Avatar (initiale)
+  // Avatar
   if (avatar) {
     const initial = (label?.trim()?.[0] || 'U').toUpperCase();
     avatar.textContent = initial;
     show(avatar, true);
   }
 
-  // Rôle admin (avec cache sessionStorage)
+  // Rôle admin
   let isAdmin = false;
   try {
     const key = `isAdmin:${user.uid}`;
@@ -125,18 +155,18 @@ onAuthStateChanged(auth, async (user) => {
       sessionStorage.setItem(key, isAdmin ? '1' : '0');
     }
   } catch {
-    // Si sessionStorage est indisponible (navigateur strict), on relit Firestore
     isAdmin = await isUserAdmin(user.uid);
   }
 
   setAdminUI(isAdmin);
+  startInactivityWatcher(); // ← Démarre le timer d'inactivité une fois connecté
 });
 
-/* ============= Déconnexion ============= */
+/* ============= Déconnexion manuelle ============= */
 if (btnLogout) {
   btnLogout.addEventListener('click', async () => {
     try {
-      // Nettoie le cache admin pour la session suivante
+      stopInactivityWatcher(); // ← Nettoie le timer au logout manuel
       const u = auth.currentUser;
       if (u) sessionStorage.removeItem(`isAdmin:${u.uid}`);
       await signOut(auth);

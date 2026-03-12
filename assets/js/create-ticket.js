@@ -1,7 +1,8 @@
 // assets/js/create-ticket.js
-import { db, auth } from './firebase-init.js';
+import { db, auth, storage } from './firebase-init.js';
 import { requireAuth, toast } from './app.js';
-import { collection, getDocs, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
 /* --- Catégories par défaut --- */
 const CATEGORY_MAP = {
@@ -35,15 +36,60 @@ function computePriority(impact, urgency) {
 }
 
 /* --- Elements UI --- */
-const formCard   = document.getElementById('ticket-form-card');
-const typeHidden = document.getElementById('type-hidden');
-const categoryEl = document.getElementById('category');
-const impactEl   = document.getElementById('impact');
-const urgencyEl  = document.getElementById('urgency');
-const priorityEl = document.getElementById('priority');
-const slaEl      = document.getElementById('sla-target');
-const form       = document.getElementById('form-create');
-const hintLogin  = document.getElementById('hint-login');
+const formCard     = document.getElementById('ticket-form-card');
+const typeHidden   = document.getElementById('type-hidden');
+const categoryEl   = document.getElementById('category');
+const impactEl     = document.getElementById('impact');
+const urgencyEl    = document.getElementById('urgency');
+const priorityEl   = document.getElementById('priority');
+const slaEl        = document.getElementById('sla-target');
+const form         = document.getElementById('form-create');
+const hintLogin    = document.getElementById('hint-login');
+const attachmentEl = document.getElementById('attachment');
+const previewDiv   = document.getElementById('attachment-preview');
+const previewImg   = document.getElementById('preview-img');
+const btnRemove    = document.getElementById('btn-remove-attachment');
+
+/* --- Aperçu image en temps réel --- */
+attachmentEl?.addEventListener('change', () => {
+  const file = attachmentEl.files[0];
+
+  if (!file) {
+    previewDiv?.classList.add('d-none');
+    return;
+  }
+
+  // Vérification taille max 5 Mo
+  if (file.size > 5 * 1024 * 1024) {
+    toast('Image trop lourde (max 5 Mo). Veuillez choisir une autre image.');
+    attachmentEl.value = '';
+    previewDiv?.classList.add('d-none');
+    return;
+  }
+
+  // Afficher l'aperçu
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    if (previewImg) previewImg.src = e.target.result;
+    previewDiv?.classList.remove('d-none');
+  };
+  reader.readAsDataURL(file);
+});
+
+/* --- Supprimer la pièce jointe --- */
+btnRemove?.addEventListener('click', () => {
+  if (attachmentEl) attachmentEl.value = '';
+  if (previewImg) previewImg.src = '';
+  previewDiv?.classList.add('d-none');
+});
+
+/* --- Upload image vers Firebase Storage --- */
+async function uploadAttachment(file, ticketId) {
+  const fileName = `${Date.now()}_${file.name}`;
+  const storageRef = ref(storage, `tickets/${ticketId}/${fileName}`);
+  await uploadBytes(storageRef, file);
+  return await getDownloadURL(storageRef);
+}
 
 /* --- 1) Choix du type -> affichage formulaire + catégories --- */
 const radios = document.querySelectorAll('input[name="ttype"]');
@@ -91,7 +137,6 @@ async function initUserAutocomplete() {
       if (name) names.push(name);
     });
 
-    // Créer et injecter le datalist
     const datalist = document.createElement('datalist');
     datalist.id = 'users-list';
     names.sort().forEach(name => {
@@ -101,7 +146,6 @@ async function initUserAutocomplete() {
     });
     document.body.appendChild(datalist);
 
-    // Lier au champ input
     const userNameInput = document.getElementById('userName');
     if (userNameInput) {
       userNameInput.setAttribute('list', 'users-list');
@@ -121,7 +165,6 @@ async function initUserAutocomplete() {
     return;
   }
 
-  // Activer l'autocomplete
   await initUserAutocomplete();
 
   // Pré-remplir avec le nom du user connecté
@@ -130,13 +173,14 @@ async function initUserAutocomplete() {
     if (user.displayName) {
       userNameInput.value = user.displayName;
     } else {
-      // Fallback : chercher dans Firestore
       try {
-        const { getDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
-        const snap = await getDoc(doc(db, 'users', user.uid));
-        if (snap.exists() && snap.data().displayName) {
-          userNameInput.value = snap.data().displayName;
-        }
+        const snap = await getDocs(collection(db, 'users'));
+        // cherche le doc dont l'uid correspond
+        snap.forEach(d => {
+          if (d.id === user.uid && d.data().displayName) {
+            userNameInput.value = d.data().displayName;
+          }
+        });
       } catch (err) {
         console.error('[prefill] Erreur Firestore:', err);
       }
@@ -150,11 +194,11 @@ form?.addEventListener('submit', async (e) => {
   const user = auth.currentUser;
   if (!user) return;
 
-  if (!typeHidden || !typeHidden.value) {
+  if (!typeHidden?.value) {
     toast('Veuillez sélectionner un type de ticket.');
     return;
   }
-  if (!categoryEl || !categoryEl.value) {
+  if (!categoryEl?.value) {
     toast('Veuillez choisir une catégorie.');
     return;
   }
@@ -165,24 +209,45 @@ form?.addEventListener('submit', async (e) => {
     return;
   }
 
-  const payload = {
-    title:        document.getElementById('title').value.trim(),
-    description:  document.getElementById('description').value.trim(),
-    userName:     userNameValue,
-    category:     categoryEl.value,
-    type:         typeHidden.value,
-    impact:       impactEl.value,
-    urgency:      urgencyEl.value,
-    priority:     priorityEl.value,
-    slaTargetHours: SLA_BY_PRIORITY[priorityEl.value] || 24,
-    status:       'Ouvert',
-    createdAt:    serverTimestamp(),
-    createdBy:    user.uid,
-    email:        user.email || 'unknown@local'
-  };
+  // Désactiver le bouton pendant l'envoi
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Envoi en cours…';
+  }
 
   try {
-    await addDoc(collection(db, 'tickets'), payload);
+    // Créer le ticket dans Firestore
+    const payload = {
+      title:          document.getElementById('title').value.trim(),
+      description:    document.getElementById('description').value.trim(),
+      userName:       userNameValue,
+      category:       categoryEl.value,
+      type:           typeHidden.value,
+      impact:         impactEl.value,
+      urgency:        urgencyEl.value,
+      priority:       priorityEl.value,
+      slaTargetHours: SLA_BY_PRIORITY[priorityEl.value] || 24,
+      status:         'Ouvert',
+      createdAt:      serverTimestamp(),
+      createdBy:      user.uid,
+      email:          user.email || 'unknown@local',
+      attachmentURL:  null
+    };
+
+    const docRef = await addDoc(collection(db, 'tickets'), payload);
+
+    // Upload image si présente
+    const file = attachmentEl?.files[0];
+    if (file) {
+      try {
+        const url = await uploadAttachment(file, docRef.id);
+        await updateDoc(doc(db, 'tickets', docRef.id), { attachmentURL: url });
+      } catch (uploadErr) {
+        console.error('[upload] Erreur upload image:', uploadErr);
+        toast('Ticket créé, mais erreur lors de l\'upload de l\'image.');
+      }
+    }
 
     // Reset UI
     form.reset();
@@ -192,10 +257,18 @@ form?.addEventListener('submit', async (e) => {
     if (categoryEl) categoryEl.innerHTML = '<option value="">Choisir…</option>';
     document.querySelectorAll('input[name="ttype"]').forEach(x => { x.checked = false; });
     if (formCard) formCard.classList.add('d-none');
+    if (previewDiv) previewDiv.classList.add('d-none');
+    if (previewImg) previewImg.src = '';
 
-    toast('Ticket créé avec succès');
+    toast('✅ Ticket créé avec succès !');
+
   } catch (err) {
     console.error('[create-ticket] addDoc failed:', err);
     toast('Erreur: ' + (err?.message || err));
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="bi bi-send me-1"></i>Créer le ticket';
+    }
   }
 });

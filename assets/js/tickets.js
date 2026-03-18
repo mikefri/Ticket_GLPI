@@ -271,3 +271,13 @@ btnResetFilters.addEventListener('click', resetFilters);
 
   console.log('[tickets] ===== INITIALISATION TERMINÉE =====');
 })();
+
+// Pour chaque ticket qui a des attachments :
+ticket.attachments?.forEach(file => {
+  if (file.type.startsWith('image/')) {
+    const img = document.createElement('img');
+    img.src = file.data; // le Base64 s'affiche directement !
+    img.style = 'height:80px;border-radius:8px';
+    container.appendChild(img);
+  }
+});

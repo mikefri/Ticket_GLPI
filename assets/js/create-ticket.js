@@ -21,7 +21,7 @@ const CATEGORY_MAP = {
   ]
 };
 
-/* --- Matrice SLA : Impact × Urgence -> Priorité + délai cible --- */
+/* --- Matrice SLA --- */
 const ORDER = { "Faible":1, "Moyen":2, "Fort":3, "Critique":4 };
 const SLA_BY_PRIORITY = { "Critique":4, "Haute":8, "Normal":24, "Faible":72 };
 
@@ -45,7 +45,7 @@ const slaEl      = document.getElementById('sla-target');
 const form       = document.getElementById('form-create');
 const hintLogin  = document.getElementById('hint-login');
 
-/* --- 1) Choix du type -> affichage formulaire + catégories --- */
+/* --- 1) Choix du type --- */
 const radios = document.querySelectorAll('input[name="ttype"]');
 
 function fillCategories(type) {
@@ -70,7 +70,7 @@ radios.forEach(r => {
   });
 });
 
-/* --- 2) Calcul auto priorité + SLA --- */
+/* --- 2) Priorité + SLA --- */
 function refreshPriority() {
   if (!impactEl || !urgencyEl || !priorityEl || !slaEl) return;
   const p = computePriority(impactEl.value, urgencyEl.value);
@@ -81,7 +81,7 @@ impactEl?.addEventListener('change', refreshPriority);
 urgencyEl?.addEventListener('change', refreshPriority);
 refreshPriority();
 
-/* --- 3) Autocomplete "Nom complet" depuis Firestore --- */
+/* --- 3) Autocomplete "Nom complet" --- */
 async function initUserAutocomplete() {
   try {
     const snap = await getDocs(collection(db, 'users'));
@@ -90,8 +90,6 @@ async function initUserAutocomplete() {
       const name = d.data().displayName;
       if (name) names.push(name);
     });
-
-    // Créer et injecter le datalist
     const datalist = document.createElement('datalist');
     datalist.id = 'users-list';
     names.sort().forEach(name => {
@@ -100,18 +98,79 @@ async function initUserAutocomplete() {
       datalist.appendChild(opt);
     });
     document.body.appendChild(datalist);
-
-    // Lier au champ input
     const userNameInput = document.getElementById('userName');
-    if (userNameInput) {
-      userNameInput.setAttribute('list', 'users-list');
-    }
+    if (userNameInput) userNameInput.setAttribute('list', 'users-list');
   } catch (err) {
-    console.error('[autocomplete] Erreur chargement users:', err);
+    console.error('[autocomplete] Erreur:', err);
   }
 }
 
-/* --- 4) Auth requise + init autocomplete --- */
+/* --- 4) NOUVEAU : Prévisualisation des fichiers sélectionnés --- */
+document.getElementById('attachments')?.addEventListener('change', (e) => {
+  const preview = document.getElementById('preview-attachments');
+  if (!preview) return;
+  preview.innerHTML = '';
+
+  [...e.target.files].forEach((file) => {
+    // Vérification taille
+    if (file.size > 2 * 1024 * 1024) {
+      const alert = document.createElement('div');
+      alert.className = 'alert alert-warning py-1 px-2 small mb-0';
+      alert.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i>${file.name} dépasse 2 Mo et sera ignoré.`;
+      preview.appendChild(alert);
+      return;
+    }
+
+    if (file.type.startsWith('image/')) {
+      const wrap = document.createElement('div');
+      wrap.className = 'position-relative';
+
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.style.cssText = 'height:80px;width:80px;object-fit:cover;border-radius:8px;border:1px solid #ddd';
+      img.title = file.name;
+
+      wrap.appendChild(img);
+      preview.appendChild(wrap);
+    } else {
+      const badge = document.createElement('span');
+      badge.className = 'badge bg-secondary p-2 d-flex align-items-center gap-1';
+      badge.innerHTML = `<i class="bi bi-file-earmark"></i>${file.name}`;
+      preview.appendChild(badge);
+    }
+  });
+});
+
+/* --- 5) NOUVEAU : Conversion fichier → Base64 --- */
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result); // "data:image/png;base64,iVBOR..."
+    reader.onerror = () => reject(new Error(`Impossible de lire : ${file.name}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function getAttachmentsBase64() {
+  const input = document.getElementById('attachments');
+  if (!input || !input.files.length) return [];
+
+  const result = [];
+  for (const file of input.files) {
+    if (file.size > 2 * 1024 * 1024) continue; // ignore les fichiers trop lourds
+
+    const base64 = await fileToBase64(file);
+    result.push({
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      data: base64  // la donnée complète encodée en Base64
+    });
+  }
+  return result;
+}
+
+/* --- 6) Auth requise + init --- */
 (async () => {
   const user = await requireAuth(true);
   if (!user) {
@@ -121,16 +180,13 @@ async function initUserAutocomplete() {
     return;
   }
 
-  // Activer l'autocomplete
   await initUserAutocomplete();
 
-  // Pré-remplir avec le nom du user connecté
   const userNameInput = document.getElementById('userName');
   if (userNameInput) {
     if (user.displayName) {
       userNameInput.value = user.displayName;
     } else {
-      // Fallback : chercher dans Firestore
       try {
         const { getDoc, doc } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
         const snap = await getDoc(doc(db, 'users', user.uid));
@@ -138,50 +194,51 @@ async function initUserAutocomplete() {
           userNameInput.value = snap.data().displayName;
         }
       } catch (err) {
-        console.error('[prefill] Erreur Firestore:', err);
+        console.error('[prefill] Erreur:', err);
       }
     }
   }
 })();
 
-/* --- 5) Soumission --- */
+/* --- 7) Soumission --- */
 form?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const user = auth.currentUser;
   if (!user) return;
 
-  if (!typeHidden || !typeHidden.value) {
-    toast('Veuillez sélectionner un type de ticket.');
-    return;
-  }
-  if (!categoryEl || !categoryEl.value) {
-    toast('Veuillez choisir une catégorie.');
-    return;
-  }
+  if (!typeHidden?.value) { toast('Veuillez sélectionner un type de ticket.'); return; }
+  if (!categoryEl?.value)  { toast('Veuillez choisir une catégorie.'); return; }
 
   const userNameValue = document.getElementById('userName')?.value.trim();
-  if (!userNameValue) {
-    toast('Veuillez saisir votre nom complet.');
-    return;
-  }
+  if (!userNameValue) { toast('Veuillez saisir votre nom complet.'); return; }
 
-  const payload = {
-    title:        document.getElementById('title').value.trim(),
-    description:  document.getElementById('description').value.trim(),
-    userName:     userNameValue,
-    category:     categoryEl.value,
-    type:         typeHidden.value,
-    impact:       impactEl.value,
-    urgency:      urgencyEl.value,
-    priority:     priorityEl.value,
-    slaTargetHours: SLA_BY_PRIORITY[priorityEl.value] || 24,
-    status:       'Ouvert',
-    createdAt:    serverTimestamp(),
-    createdBy:    user.uid,
-    email:        user.email || 'unknown@local'
-  };
+  // Bouton en chargement
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Envoi…';
 
   try {
+    // Récupération des pièces jointes en Base64
+    const attachments = await getAttachmentsBase64();
+
+    const payload = {
+      title:          document.getElementById('title').value.trim(),
+      description:    document.getElementById('description').value.trim(),
+      userName:       userNameValue,
+      category:       categoryEl.value,
+      type:           typeHidden.value,
+      impact:         impactEl.value,
+      urgency:        urgencyEl.value,
+      priority:       priorityEl.value,
+      slaTargetHours: SLA_BY_PRIORITY[priorityEl.value] || 24,
+      status:         'Ouvert',
+      createdAt:      serverTimestamp(),
+      createdBy:      user.uid,
+      email:          user.email || 'unknown@local',
+      attachments               // ← tableau Base64 ajouté ici
+    };
+
     await addDoc(collection(db, 'tickets'), payload);
 
     // Reset UI
@@ -192,10 +249,14 @@ form?.addEventListener('submit', async (e) => {
     if (categoryEl) categoryEl.innerHTML = '<option value="">Choisir…</option>';
     document.querySelectorAll('input[name="ttype"]').forEach(x => { x.checked = false; });
     if (formCard) formCard.classList.add('d-none');
+    document.getElementById('preview-attachments').innerHTML = '';
 
-    toast('Ticket créé avec succès');
+    toast('✅ Ticket créé avec succès');
   } catch (err) {
-    console.error('[create-ticket] addDoc failed:', err);
-    toast('Erreur: ' + (err?.message || err));
+    console.error('[create-ticket] Erreur:', err);
+    toast('❌ Erreur : ' + (err?.message || err));
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
   }
 });

@@ -1,82 +1,98 @@
 // assets/js/ticket-detail.js
+// Page de détail d'un ticket avec système de chat (+ édition et suppression des messages)
+
 import './app.js';
 import { db } from './firebase-init.js';
 import { requireAuth, toast, badgeForStatus, badgeForPriority, formatDate } from './app.js';
 
 import {
-  doc, getDoc, updateDoc, deleteDoc,
-  collection, addDoc, query, orderBy, onSnapshot, Timestamp
+  doc, getDoc, updateDoc, deleteDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-let currentTicket    = null;
-let currentUser      = null;
-let isAdmin          = false;
+let currentTicket = null;
+let currentUser = null;
+let isAdmin = false;
 let unsubscribeComments = null;
 
-// ─────────────────────────────────────────────
-// URL PARAMS
-// ─────────────────────────────────────────────
+// Récupérer l'ID du ticket depuis l'URL
 function getTicketIdFromUrl() {
-  return new URLSearchParams(window.location.search).get('id');
+  const params = new URLSearchParams(window.location.search);
+  return params.get('id');
 }
 
-// ─────────────────────────────────────────────
-// CHARGEMENT DU TICKET
-// ─────────────────────────────────────────────
+// Charger le ticket
 async function loadTicket(ticketId) {
-  try {
-    const snap = await getDoc(doc(db, 'tickets', ticketId));
-    if (!snap.exists()) { showError('Ticket introuvable'); return; }
+  console.log('[ticket-detail] Chargement du ticket:', ticketId);
 
-    currentTicket = { id: snap.id, ...snap.data() };
+  try {
+    const ticketRef = doc(db, 'tickets', ticketId);
+    const ticketSnap = await getDoc(ticketRef);
+
+    if (!ticketSnap.exists()) {
+      showError('Ticket introuvable');
+      return;
+    }
+
+    currentTicket = { id: ticketSnap.id, ...ticketSnap.data() };
+    console.log('[ticket-detail] Ticket chargé:', currentTicket);
+
     displayTicket(currentTicket);
 
-    if (currentUser) loadComments(ticketId);
+    if (currentUser) {
+      loadComments(ticketId);
+    } else {
+      console.error('[ticket-detail] currentUser non défini !');
+    }
 
-  } catch (err) {
-    console.error('[ticket-detail] Erreur chargement:', err);
-    showError('Erreur lors du chargement du ticket : ' + err.message);
+  } catch (error) {
+    console.error('[ticket-detail] Erreur de chargement:', error);
+    showError('Erreur lors du chargement du ticket: ' + error.message);
   }
 }
 
-// ─────────────────────────────────────────────
-// AFFICHAGE DU TICKET
-// ─────────────────────────────────────────────
+// Afficher le ticket
 function displayTicket(ticket) {
   document.getElementById('loading').classList.add('d-none');
   document.getElementById('ticket-content').classList.remove('d-none');
 
-  document.getElementById('ticket-title').textContent   = ticket.title || 'Sans titre';
-  document.getElementById('ticket-id').textContent      = ticket.id;
+  document.getElementById('ticket-title').textContent = ticket.title || 'Sans titre';
+  document.getElementById('ticket-id').textContent = ticket.id;
+
+  const badgesDiv = document.getElementById('ticket-badges');
+  badgesDiv.innerHTML = `
+    ${badgeForStatus(ticket.status)}
+    ${badgeForPriority(ticket.priority)}
+  `;
+
   document.getElementById('ticket-created').textContent = formatDate(ticket.createdAt);
   document.getElementById('ticket-updated').textContent = formatDate(ticket.updatedAt || ticket.createdAt);
+
   document.getElementById('requester-name').textContent = ticket.userName || 'Utilisateur inconnu';
-  document.getElementById('assigned-name').textContent  = ticket.takenBy || ticket.assignedTo || 'Non assigné';
 
-  // Badges
-  document.getElementById('ticket-badges').innerHTML =
-    `${badgeForStatus(ticket.status)} ${badgeForPriority(ticket.priority)}`;
-
-  // Catégorie / Type
   document.getElementById('ticket-category').textContent = ticket.category || 'Non spécifiée';
   const typeSpan = document.getElementById('ticket-type');
-  typeSpan.textContent = ticket.type ? ' · ' + ticket.type : '';
+  if (ticket.type) {
+    typeSpan.textContent = ' • ' + ticket.type;
+  }
 
-  // Description
-  document.getElementById('ticket-description').innerHTML =
-    linkify(ticket.description) || 'Aucune description fournie.';
+  const assignedName = ticket.takenBy || ticket.assignedTo || 'Non assigné';
+  document.getElementById('assigned-name').textContent = assignedName;
 
-  // Pièces jointes
+  const descriptionEl = document.getElementById('ticket-description');
+  descriptionEl.innerHTML = linkify(ticket.description) || 'Aucune description fournie.';
+
+  // ✅ Pièces jointes
   if (ticket.attachments && ticket.attachments.length > 0) {
     displayAttachments(ticket.attachments);
   }
 
-  // Actions admin
-  if (isAdmin) displayAdminActions(ticket);
+  if (isAdmin) {
+    displayAdminActions(ticket);
+  }
 }
 
 // ─────────────────────────────────────────────
-// PIÈCES JOINTES (Base64)
+// ✅ AFFICHAGE DES PIÈCES JOINTES (Base64)
 // ─────────────────────────────────────────────
 function displayAttachments(attachments) {
   const section = document.getElementById('attachments-section');
@@ -109,12 +125,12 @@ function displayAttachments(attachments) {
       const a = document.createElement('a');
       a.href      = att.data;
       a.download  = att.name || 'fichier';
-      a.className = 'attach-file';
+      a.className = 'attach-file-badge';
       a.innerHTML = `
-        <i class="bi bi-file-earmark-arrow-down"></i>
+        <i class="bi bi-file-earmark-arrow-down" style="font-size:1.2rem;flex-shrink:0"></i>
         <div style="overflow:hidden;min-width:0">
           <div class="attach-file-name">${escapeHtml(att.name || 'Fichier')}</div>
-          <div class="attach-file-sub">Télécharger</div>
+          <div style="font-size:0.7rem;opacity:0.5">Télécharger</div>
         </div>
       `;
       list.appendChild(a);
@@ -123,7 +139,7 @@ function displayAttachments(attachments) {
 }
 
 // ─────────────────────────────────────────────
-// LIGHTBOX
+// ✅ LIGHTBOX
 // ─────────────────────────────────────────────
 function openLightbox(images, startIdx) {
   document.getElementById('__lightbox')?.remove();
@@ -136,16 +152,16 @@ function openLightbox(images, startIdx) {
   function render() {
     const cur = images[idx];
     overlay.innerHTML = `
-      <div class="lb-bar">
-        <span class="lb-title">
+      <div class="lb-topbar">
+        <span class="lb-name">
           <i class="bi bi-paperclip me-1"></i>${escapeHtml(cur.name || 'Image')}
           ${images.length > 1 ? `<span class="lb-counter">${idx + 1} / ${images.length}</span>` : ''}
         </span>
-        <div class="lb-actions">
+        <div class="lb-controls">
           <a href="${cur.data}" download="${escapeHtml(cur.name || 'image')}" class="lb-btn" title="Télécharger">
             <i class="bi bi-download"></i>
           </a>
-          <button class="lb-btn" id="lb-close" title="Fermer" style="font-size:1.5rem">&times;</button>
+          <button class="lb-btn" id="lb-close" title="Fermer" style="font-size:1.5rem;line-height:1">&times;</button>
         </div>
       </div>
 
@@ -172,12 +188,11 @@ function openLightbox(images, startIdx) {
   }
 
   function onKey(e) {
-    if (e.key === 'Escape')                                   close();
-    if (e.key === 'ArrowLeft'  && idx > 0)                   { idx--; render(); }
-    if (e.key === 'ArrowRight' && idx < images.length - 1)   { idx++; render(); }
+    if (e.key === 'Escape')                                 close();
+    if (e.key === 'ArrowLeft'  && idx > 0)                 { idx--; render(); }
+    if (e.key === 'ArrowRight' && idx < images.length - 1) { idx++; render(); }
   }
 
-  // Fermer en cliquant sur le fond
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   document.addEventListener('keydown', onKey);
 
@@ -185,285 +200,402 @@ function openLightbox(images, startIdx) {
   document.body.appendChild(overlay);
 }
 
-// ─────────────────────────────────────────────
-// ACTIONS ADMIN
-// ─────────────────────────────────────────────
+// Afficher les actions admin
 function displayAdminActions(ticket) {
-  const section = document.getElementById('admin-actions');
-  section.classList.remove('d-none');
+  const actionsSection = document.getElementById('admin-actions');
+  actionsSection.classList.remove('d-none');
 
   const btnTake     = document.getElementById('btn-take-ticket');
   const btnResolve  = document.getElementById('btn-resolve-ticket');
   const btnProgress = document.getElementById('btn-progress-ticket');
   const btnClose    = document.getElementById('btn-close-ticket');
 
-  const closed = ticket.status === 'Résolu' || ticket.status === 'Fermé';
-  btnTake.disabled     = closed;
-  btnResolve.disabled  = closed;
-  btnProgress.disabled = closed;
-  btnClose.disabled    = ticket.status === 'Fermé';
+  if (ticket.status === 'Résolu' || ticket.status === 'Fermé') {
+    btnTake.disabled = true;
+    btnResolve.disabled = true;
+    btnProgress.disabled = true;
+  }
 
-  btnTake.onclick     = takeTicket;
+  if (ticket.status === 'Fermé') {
+    btnClose.disabled = true;
+  }
+
+  btnTake.onclick     = () => takeTicket();
   btnResolve.onclick  = () => updateTicketStatus('Résolu');
   btnProgress.onclick = () => updateTicketStatus('En attente');
-  btnClose.onclick    = closeTicket;
+  btnClose.onclick    = () => closeTicket();
 }
 
+// Prendre en charge un ticket
 async function takeTicket() {
   if (!currentTicket || !currentUser) return;
+
   try {
-    await updateDoc(doc(db, 'tickets', currentTicket.id), {
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+    const userName = currentUser.displayName || currentUser.email;
+
+    await updateDoc(ticketRef, {
       status: 'En cours',
-      takenBy: currentUser.displayName || currentUser.email,
+      takenBy: userName,
       takenByUid: currentUser.uid,
       updatedAt: Timestamp.now()
     });
+
     toast('Ticket pris en charge avec succès');
     await loadTicket(currentTicket.id);
-  } catch (err) {
-    toast('Erreur : ' + err.message);
+
+  } catch (error) {
+    console.error('[ticket-detail] Erreur prise en charge:', error);
+    toast('Erreur lors de la prise en charge: ' + error.message);
   }
 }
 
+// Mettre à jour le statut
 async function updateTicketStatus(newStatus) {
   if (!currentTicket) return;
+
   try {
-    await updateDoc(doc(db, 'tickets', currentTicket.id), {
-      status: newStatus, updatedAt: Timestamp.now()
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+
+    await updateDoc(ticketRef, {
+      status: newStatus,
+      updatedAt: Timestamp.now()
     });
+
     toast(`Statut mis à jour : ${newStatus}`);
     await loadTicket(currentTicket.id);
-  } catch (err) {
-    toast('Erreur : ' + err.message);
+
+  } catch (error) {
+    console.error('[ticket-detail] Erreur mise à jour statut:', error);
+    toast('Erreur lors de la mise à jour: ' + error.message);
   }
 }
 
+// Fermer le ticket
 async function closeTicket() {
   if (!currentTicket) return;
+
   if (!confirm('Êtes-vous sûr de vouloir fermer ce ticket ?')) return;
+
   try {
-    await updateDoc(doc(db, 'tickets', currentTicket.id), {
-      status: 'Fermé', closedAt: Timestamp.now(), updatedAt: Timestamp.now()
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+
+    await updateDoc(ticketRef, {
+      status: 'Fermé',
+      closedAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
     });
+
     toast('Ticket fermé avec succès');
     await loadTicket(currentTicket.id);
-  } catch (err) {
-    toast('Erreur : ' + err.message);
+
+  } catch (error) {
+    console.error('[ticket-detail] Erreur fermeture:', error);
+    toast('Erreur lors de la fermeture: ' + error.message);
   }
 }
 
-// ─────────────────────────────────────────────
-// CHAT
-// ─────────────────────────────────────────────
-function loadComments(ticketId) {
-  const container = document.getElementById('chat-messages');
-  if (!container) return;
+// ===== SYSTÈME DE CHAT =====
 
-  unsubscribeComments?.();
-  container.innerHTML = `<div class="chat-empty"><i class="bi bi-hourglass-split"></i><p>Chargement…</p></div>`;
+function loadComments(ticketId) {
+  console.log('[chat] Chargement des commentaires pour ticket:', ticketId);
+
+  const chatContainer = document.getElementById('chat-messages');
+  if (!chatContainer) {
+    console.error('[chat] Element #chat-messages non trouvé !');
+    return;
+  }
+
+  if (unsubscribeComments) {
+    unsubscribeComments();
+  }
+
+  chatContainer.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Chargement des messages...</div>';
 
   try {
-    const q = query(collection(db, 'tickets', ticketId, 'comments'), orderBy('createdAt', 'asc'));
+    const commentsRef = collection(db, 'tickets', ticketId, 'comments');
+    const q = query(commentsRef, orderBy('createdAt', 'asc'));
 
     unsubscribeComments = onSnapshot(q, (snapshot) => {
-      container.innerHTML = '';
+      console.log('[chat] Snapshot reçu, nb docs:', snapshot.size);
+
+      chatContainer.innerHTML = '';
 
       if (snapshot.empty) {
-        container.innerHTML = `
-          <div class="chat-empty">
-            <i class="bi bi-chat-dots"></i>
-            <p>Aucun message pour le moment.<br><small>Soyez le premier à écrire !</small></p>
-          </div>`;
+        chatContainer.innerHTML = `
+          <div class="text-center text-muted py-4">
+            <i class="bi bi-chat-dots fs-1 d-block mb-2"></i>
+            Aucun message pour le moment.<br>
+            <small>Soyez le premier à écrire !</small>
+          </div>
+        `;
         return;
       }
 
       snapshot.forEach((docSnap) => {
-        const comment   = docSnap.data();
+        const comment = docSnap.data();
         const commentId = docSnap.id;
-        const isMe      = currentUser && comment.createdBy === currentUser.uid;
-        const canAct    = isMe || isAdmin;
+        console.log('[chat] Message:', comment);
+
+        const isCurrentUser = currentUser && comment.createdBy === currentUser.uid;
+        const canAct = isCurrentUser || isAdmin;
+
+        const editedLabel = comment.editedAt
+          ? `<span class="chat-edited-label"><i class="bi bi-pencil"></i> modifié</span>`
+          : '';
 
         const bubble = document.createElement('div');
-        bubble.className = `chat-message ${isMe ? 'user-message' : 'admin-message'}`;
+        bubble.className = `chat-message ${isCurrentUser ? 'user-message' : 'admin-message'}`;
+
         bubble.innerHTML = `
           <div class="chat-bubble">
             ${canAct ? `
               <div class="chat-actions">
-                <button class="btn-chat-action btn-chat-edit"   title="Modifier"><i class="bi bi-pencil-fill"></i></button>
-                <button class="btn-chat-action btn-chat-delete" title="Supprimer"><i class="bi bi-trash-fill"></i></button>
-              </div>` : ''}
+                <button class="btn-chat-action btn-chat-edit" title="Modifier">
+                  <i class="bi bi-pencil-fill"></i>
+                </button>
+                <button class="btn-chat-action btn-chat-delete" title="Supprimer">
+                  <i class="bi bi-trash-fill"></i>
+                </button>
+              </div>
+            ` : ''}
             <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
             <div class="chat-text" id="chat-text-${commentId}">${linkify(comment.text || '')}</div>
             <div class="chat-edit-area d-none" id="chat-edit-${commentId}">
               <textarea class="form-control form-control-sm mb-2" rows="2">${escapeHtml(comment.text || '')}</textarea>
               <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-success btn-save-edit"><i class="bi bi-check-lg me-1"></i>Sauvegarder</button>
-                <button class="btn btn-sm btn-secondary btn-cancel-edit"><i class="bi bi-x-lg me-1"></i>Annuler</button>
+                <button class="btn btn-sm btn-success btn-save-edit">
+                  <i class="bi bi-check-lg me-1"></i>Sauvegarder
+                </button>
+                <button class="btn btn-sm btn-secondary btn-cancel-edit">
+                  <i class="bi bi-x-lg me-1"></i>Annuler
+                </button>
               </div>
             </div>
-            <div class="chat-time">
-              ${formatCommentDate(comment.createdAt)}
-              ${comment.editedAt ? `<span class="chat-edited-label"><i class="bi bi-pencil"></i> modifié</span>` : ''}
-            </div>
-          </div>`;
+            <div class="chat-time">${formatCommentDate(comment.createdAt)}${editedLabel}</div>
+          </div>
+        `;
 
-        // Modifier
         bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
           document.getElementById(`chat-text-${commentId}`)?.classList.add('d-none');
-          const area = document.getElementById(`chat-edit-${commentId}`);
-          area?.classList.remove('d-none');
-          const ta = area?.querySelector('textarea');
+          const editArea = document.getElementById(`chat-edit-${commentId}`);
+          editArea?.classList.remove('d-none');
+          const ta = editArea?.querySelector('textarea');
           if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
         });
 
-        // Annuler édition
         bubble.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {
           document.getElementById(`chat-text-${commentId}`)?.classList.remove('d-none');
           document.getElementById(`chat-edit-${commentId}`)?.classList.add('d-none');
         });
 
-        // Sauvegarder édition
         bubble.querySelector('.btn-save-edit')?.addEventListener('click', async () => {
-          const ta      = bubble.querySelector('.chat-edit-area textarea');
-          const newText = ta?.value?.trim();
+          const textarea = bubble.querySelector('.chat-edit-area textarea');
+          const newText = textarea?.value?.trim();
           if (!newText) { toast('Le message ne peut pas être vide'); return; }
-          const btn = bubble.querySelector('.btn-save-edit');
-          btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+          const saveBtn = bubble.querySelector('.btn-save-edit');
+          saveBtn.disabled = true;
+          saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
           try {
             await updateDoc(doc(db, 'tickets', currentTicket.id, 'comments', commentId), {
-              text: newText, editedAt: Timestamp.now()
+              text: newText,
+              editedAt: Timestamp.now()
             });
             await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
             toast('Message modifié');
-          } catch (err) {
-            toast('Erreur : ' + err.message);
-            btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Sauvegarder';
+          } catch (error) {
+            console.error('[chat] Erreur modification:', error);
+            toast('Erreur: ' + error.message);
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Sauvegarder';
           }
         });
 
-        // Raccourcis clavier dans le textarea d'édition
         bubble.querySelector('.chat-edit-area textarea')?.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); bubble.querySelector('.btn-save-edit')?.click(); }
-          if (e.key === 'Escape') bubble.querySelector('.btn-cancel-edit')?.click();
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            bubble.querySelector('.btn-save-edit')?.click();
+          }
+          if (e.key === 'Escape') {
+            bubble.querySelector('.btn-cancel-edit')?.click();
+          }
         });
 
-        // Supprimer
         bubble.querySelector('.btn-chat-delete')?.addEventListener('click', async () => {
           if (!confirm('Supprimer ce message définitivement ?')) return;
           try {
             await deleteDoc(doc(db, 'tickets', currentTicket.id, 'comments', commentId));
             await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
             toast('Message supprimé');
-          } catch (err) {
-            toast('Erreur : ' + err.message);
+          } catch (error) {
+            console.error('[chat] Erreur suppression:', error);
+            toast('Erreur: ' + error.message);
           }
         });
 
-        container.appendChild(bubble);
+        chatContainer.appendChild(bubble);
       });
 
-      container.scrollTop = container.scrollHeight;
+      chatContainer.scrollTop = chatContainer.scrollHeight;
 
-    }, (err) => {
-      console.error('[chat] onSnapshot error:', err);
-      container.innerHTML = `<div class="alert alert-danger m-3"><i class="bi bi-exclamation-triangle me-1"></i>Erreur : ${err.message}</div>`;
+    }, (error) => {
+      console.error('[chat] Erreur onSnapshot:', error);
+      chatContainer.innerHTML = `
+        <div class="alert alert-danger m-3">
+          <i class="bi bi-exclamation-triangle"></i>
+          Erreur de chargement des messages: ${error.message}
+        </div>
+      `;
     });
 
-  } catch (err) {
-    console.error('[chat] query error:', err);
-    container.innerHTML = `<div class="alert alert-danger m-3">Erreur : ${err.message}</div>`;
+  } catch (error) {
+    console.error('[chat] Erreur création query:', error);
+    chatContainer.innerHTML = `
+      <div class="alert alert-danger m-3">
+        Erreur: ${error.message}
+      </div>
+    `;
   }
 }
 
-async function addComment(text) {
-  if (!currentTicket) { toast('Ticket non chargé'); return; }
-  if (!currentUser)   { toast('Vous devez être connecté'); return; }
-  if (!text?.trim())  { toast('Le message ne peut pas être vide'); return; }
+// ===== UTILITAIRES =====
 
-  const btn      = document.getElementById('btn-add-comment');
-  const textarea = document.getElementById('new-comment');
-
-  btn.disabled = true; btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
+function formatCommentDate(timestamp) {
+  if (!timestamp) return '';
   try {
-    await addDoc(collection(db, 'tickets', currentTicket.id, 'comments'), {
-      text:      text.trim(),
-      createdBy: currentUser.uid,
-      userName:  currentUser.displayName || currentUser.email || 'Utilisateur',
-      createdAt: Timestamp.now()
+    let date;
+    if (timestamp.toDate) {
+      date = timestamp.toDate();
+    } else if (timestamp.seconds) {
+      date = new Date(timestamp.seconds * 1000);
+    } else {
+      date = new Date(timestamp);
+    }
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
     });
-    textarea.value = '';
-    resetTextareaHeight();
-    await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
-  } catch (err) {
-    toast('Erreur lors de l\'envoi : ' + err.message);
-  } finally {
-    btn.disabled = false; btn.innerHTML = '<i class="bi bi-send-fill"></i>';
+  } catch (e) {
+    console.error('[chat] Erreur formatage date:', e);
+    return '';
   }
-}
-
-// ─────────────────────────────────────────────
-// UTILITAIRES
-// ─────────────────────────────────────────────
-function formatCommentDate(ts) {
-  if (!ts) return '';
-  try {
-    const d = ts.toDate ? ts.toDate() : ts.seconds ? new Date(ts.seconds * 1000) : new Date(ts);
-    return d.toLocaleString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
-  } catch { return ''; }
 }
 
 function escapeHtml(text) {
   if (!text) return '';
-  return String(text).replace(/[&<>"']/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' }[m]));
+  const map = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' };
+  return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
 function linkify(text) {
   if (!text) return '';
-  return escapeHtml(text).replace(/(https?:\/\/[^\s<>"']+)/g, url =>
-    `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent2)">${url}</a>`
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+  return escapeHtml(text).replace(urlRegex, url =>
+    `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
   );
 }
 
 function resetTextareaHeight() {
-  const ta = document.getElementById('new-comment');
-  if (ta) { ta.style.height = 'auto'; ta.style.height = '44px'; }
+  const textarea = document.getElementById('new-comment');
+  if (textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = '90px';
+  }
 }
 
-function showError(msg) {
+async function addComment(text) {
+  console.log('[chat] Tentative ajout message:', text);
+
+  if (!currentTicket) { toast('Erreur: ticket non chargé'); return; }
+  if (!currentUser)   { toast('Erreur: vous devez être connecté'); return; }
+  if (!text || text.trim() === '') { toast('Le message ne peut pas être vide'); return; }
+
+  const btnSend = document.getElementById('btn-add-comment');
+  const textarea = document.getElementById('new-comment');
+
+  try {
+    if (btnSend) {
+      btnSend.disabled = true;
+      btnSend.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    }
+
+    await addDoc(collection(db, 'tickets', currentTicket.id, 'comments'), {
+      text: text.trim(),
+      createdBy: currentUser.uid,
+      userName: currentUser.displayName || currentUser.email || 'Utilisateur',
+      createdAt: Timestamp.now()
+    });
+
+    console.log('[chat] Message ajouté avec succès');
+    if (textarea) { textarea.value = ''; resetTextareaHeight(); }
+    await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
+
+  } catch (error) {
+    console.error('[chat] Erreur ajout message:', error);
+    toast('Erreur lors de l\'envoi: ' + error.message);
+  } finally {
+    if (btnSend) {
+      btnSend.disabled = false;
+      btnSend.innerHTML = '<i class="bi bi-send-fill"></i>';
+    }
+  }
+}
+
+function showError(message) {
   document.getElementById('loading').classList.add('d-none');
   document.getElementById('error').classList.remove('d-none');
-  document.getElementById('error-message').textContent = msg;
+  document.getElementById('error-message').textContent = message;
 }
 
-// ─────────────────────────────────────────────
-// EVENT LISTENERS
-// ─────────────────────────────────────────────
+// ===== EVENT LISTENERS =====
+
 document.getElementById('btn-add-comment')?.addEventListener('click', () => {
-  addComment(document.getElementById('new-comment')?.value);
+  const textarea = document.getElementById('new-comment');
+  if (textarea) addComment(textarea.value);
 });
 
 document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addComment(e.target.value); }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    addComment(e.target.value);
+  }
 });
 
 document.getElementById('new-comment')?.addEventListener('input', function () {
   this.style.height = 'auto';
-  this.style.height = Math.min(Math.max(this.scrollHeight, 44), 150) + 'px';
+  const newHeight = Math.min(this.scrollHeight, 200);
+  this.style.height = Math.max(newHeight, 90) + 'px';
 });
 
-// ─────────────────────────────────────────────
-// INITIALISATION
-// ─────────────────────────────────────────────
+// ===== INITIALISATION =====
 (async () => {
+  console.log('[ticket-detail] ===== INITIALISATION =====');
+
   const ticketId = getTicketIdFromUrl();
-  if (!ticketId) { showError('Aucun ID de ticket fourni dans l\'URL'); return; }
+  console.log('[ticket-detail] Ticket ID depuis URL:', ticketId);
+
+  if (!ticketId) {
+    showError('Aucun ID de ticket fourni dans l\'URL');
+    return;
+  }
 
   const user = await requireAuth(true);
-  if (!user) { showError('Vous devez être connecté pour voir ce ticket'); return; }
+  console.log('[ticket-detail] Utilisateur après requireAuth:', user);
+
+  if (!user) {
+    showError('Vous devez être connecté pour voir ce ticket');
+    return;
+  }
 
   currentUser = user;
-  isAdmin     = window.__isAdmin === true;
+  isAdmin = window.__isAdmin === true;
+
+  console.log('[ticket-detail] currentUser défini:', currentUser.email);
+  console.log('[ticket-detail] isAdmin:', isAdmin);
 
   await loadTicket(ticketId);
+
+  console.log('[ticket-detail] ===== INITIALISATION TERMINÉE =====');
 })();

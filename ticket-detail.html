@@ -8,6 +8,104 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/styles.css">
+
+  <style>
+    /* ── Pièces jointes ── */
+    .attachments-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .attach-thumb {
+      height: 88px;
+      width: 88px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .attach-thumb:hover {
+      transform: scale(1.06);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+    }
+    .attach-file-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      color: inherit;
+      text-decoration: none;
+      max-width: 210px;
+      transition: background 0.2s;
+    }
+    .attach-file-badge:hover { background: rgba(255,255,255,0.1); color: inherit; }
+    .attach-file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+
+    /* ── Lightbox ── */
+    #__lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0,0,0,0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      animation: lbIn 0.18s ease;
+    }
+    @keyframes lbIn { from { opacity: 0; } to { opacity: 1; } }
+    .lb-topbar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
+    }
+    .lb-name    { color: #fff; font-size: 0.85rem; opacity: 0.75; }
+    .lb-counter { color: rgba(255,255,255,0.4); font-size: 0.78rem; margin-left: 10px; }
+    .lb-controls { display: flex; gap: 10px; align-items: center; }
+    .lb-btn {
+      background: none; border: none;
+      color: #fff; opacity: 0.7;
+      font-size: 1.25rem; cursor: pointer;
+      text-decoration: none;
+      display: flex; align-items: center;
+      transition: opacity 0.15s;
+    }
+    .lb-btn:hover { opacity: 1; color: #fff; }
+    .lb-img {
+      max-width: 90vw; max-height: 80vh;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    }
+    .lb-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.1); border: none; color: #fff;
+      width: 44px; height: 44px; border-radius: 50%;
+      font-size: 1.1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    .lb-nav:hover    { background: rgba(255,255,255,0.2); }
+    .lb-nav:disabled { opacity: 0.2; cursor: default; }
+    .lb-prev { left: 1rem; }
+    .lb-next { right: 1rem; }
+  </style>
 </head>
 <body>
 
@@ -47,7 +145,7 @@
 </nav>
 
 <main class="container my-4">
-  
+
   <!-- Bouton retour -->
   <div class="mb-3">
     <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm">
@@ -71,9 +169,9 @@
 
   <!-- Contenu du ticket -->
   <div id="ticket-content" class="d-none">
-    
+
     <div class="ticket-detail-card">
-      
+
       <!-- En-tête -->
       <div class="ticket-header">
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
@@ -138,10 +236,12 @@
         </div>
       </div>
 
-      <!-- Pièces jointes -->
+      <!-- ✅ PIÈCES JOINTES — seul ajout dans le HTML -->
       <div class="info-section d-none" id="attachments-section">
-        <div class="info-label">Pièces jointes</div>
-        <div id="attachments-list"></div>
+        <div class="info-label">
+          <i class="bi bi-paperclip me-1"></i>Pièces jointes
+        </div>
+        <div class="attachments-grid" id="attachments-list"></div>
       </div>
 
       <!-- Actions (admin uniquement) -->
@@ -168,19 +268,15 @@
         <div class="info-label p-3 pb-0">
           <i class="bi bi-chat-dots me-1"></i> Discussion
         </div>
-        
+
         <div id="chat-container">
-          <!-- Messages -->
-          <div id="chat-messages">
-            <!-- Les messages seront injectés ici par JS -->
-          </div>
-          
-          <!-- Zone de saisie -->
+          <div id="chat-messages"></div>
+
           <div id="chat-input-area">
             <div class="chat-input-wrapper">
-              <textarea 
-                class="form-control" 
-                id="new-comment" 
+              <textarea
+                class="form-control"
+                id="new-comment"
                 rows="3"
                 placeholder="Écrivez votre message..."></textarea>
               <button class="btn btn-primary" id="btn-add-comment" type="button" title="Envoyer">
@@ -192,7 +288,7 @@
             </p>
           </div>
         </div>
-        
+
       </div>
 
     </div>

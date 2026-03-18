@@ -113,7 +113,7 @@ document.getElementById('attachments')?.addEventListener('change', (e) => {
 
   [...e.target.files].forEach((file) => {
     // Vérification taille
-    if (file.size > 2 * 1024 * 1024) {
+    if (file.size > 500 * 1024) {
       const alert = document.createElement('div');
       alert.className = 'alert alert-warning py-1 px-2 small mb-0';
       alert.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i>${file.name} dépasse 2 Mo et sera ignoré.`;
@@ -157,7 +157,7 @@ async function getAttachmentsBase64() {
 
   const result = [];
   for (const file of input.files) {
-    if (file.size > 2 * 1024 * 1024) continue; // ignore les fichiers trop lourds
+    if (file.size > 500 * 1024) continue; // ignore les fichiers trop lourds
 
     const base64 = await fileToBase64(file);
     result.push({

@@ -46,32 +46,119 @@
   </div>
 </nav>
 <!-- MAIN -->
-<main class="container my-4">
-  <nav aria-label="breadcrumb">
+<main class="container-fluid my-4">
+  <nav aria-label="breadcrumb" class="container">
     <ol class="breadcrumb">
       <li class="breadcrumb-item"><a href="index.html">Accueil</a></li>
       <li class="breadcrumb-item active" aria-current="page">Administration</li>
     </ol>
   </nav>
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0">Console d'administration</h4>
-    <div class="d-flex gap-2">
-      <input type="search" class="form-control form-control-sm" id="search"
-             placeholder="Recherche (titre, email, catégorie)…" style="width: 280px;">
-      <select class="form-select form-select-sm" id="filter-status" style="width: 160px;">
-        <option value="">Tous les statuts</option>
-        <option>Ouvert</option>
-        <option>En cours</option>
-        <option>En attente</option>
-        <option>Résolu</option>
-        <option>Fermé</option>
-      </select>
-    </div>
-  </div>
+  <div class="d-flex gap-0" style="min-height: 80vh;">
 
-  <div id="admin-list" class="vstack gap-3"></div>
-  <p id="admin-empty" class="text-muted d-none">Aucun ticket à afficher.</p>
+    <!-- ── Sidebar filtres ── -->
+    <aside id="filter-sidebar" style="width: 230px; min-width: 230px; background: var(--bs-body-bg, #fff);
+           border-right: 1px solid #dee2e6; padding: 1.25rem 1rem; display: flex;
+           flex-direction: column; gap: 1.5rem; position: sticky; top: 0; align-self: flex-start; max-height: 100vh; overflow-y: auto;">
+
+      <!-- Titre -->
+      <h6 class="mb-0 text-muted" style="font-size: 11px; text-transform: uppercase; letter-spacing: .06em;">
+        <i class="bi bi-funnel me-1"></i>Filtres
+      </h6>
+
+      <!-- Recherche -->
+      <div>
+        <p class="mb-2" style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: #6c757d;">Recherche</p>
+        <input type="search" class="form-control form-control-sm" id="search"
+               placeholder="Titre, email, catégorie…">
+      </div>
+
+      <!-- Statuts -->
+      <div>
+        <p class="mb-2" style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: #6c757d;">Statut</p>
+        <div class="d-flex flex-column gap-2">
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-status" type="checkbox" value="Ouvert" id="fs-ouvert" checked>
+            <label class="form-check-label small" for="fs-ouvert">
+              <span class="badge bg-success-subtle text-success-emphasis">Ouvert</span>
+            </label>
+          </div>
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-status" type="checkbox" value="En cours" id="fs-encours" checked>
+            <label class="form-check-label small" for="fs-encours">
+              <span class="badge bg-primary-subtle text-primary-emphasis">En cours</span>
+            </label>
+          </div>
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-status" type="checkbox" value="En attente" id="fs-attente" checked>
+            <label class="form-check-label small" for="fs-attente">
+              <span class="badge bg-warning-subtle text-warning-emphasis">En attente</span>
+            </label>
+          </div>
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-status" type="checkbox" value="Résolu" id="fs-resolu" checked>
+            <label class="form-check-label small" for="fs-resolu">
+              <span class="badge bg-info-subtle text-info-emphasis">Résolu</span>
+            </label>
+          </div>
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-status" type="checkbox" value="Fermé" id="fs-ferme" checked>
+            <label class="form-check-label small" for="fs-ferme">
+              <span class="badge bg-secondary-subtle text-secondary-emphasis">Fermé</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Priorités -->
+      <div>
+        <p class="mb-2" style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: #6c757d;">Priorité</p>
+        <div class="d-flex flex-column gap-2">
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-priority" type="checkbox" value="Critique" id="fp-critique" checked>
+            <label class="form-check-label small" for="fp-critique">
+              <span class="badge bg-danger-subtle text-danger-emphasis">Critique</span>
+            </label>
+          </div>
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-priority" type="checkbox" value="Haute" id="fp-haute" checked>
+            <label class="form-check-label small" for="fp-haute">
+              <span class="badge bg-warning-subtle text-warning-emphasis">Haute</span>
+            </label>
+          </div>
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-priority" type="checkbox" value="Moyenne" id="fp-moyenne" checked>
+            <label class="form-check-label small" for="fp-moyenne">
+              <span class="badge bg-primary-subtle text-primary-emphasis">Moyenne</span>
+            </label>
+          </div>
+          <div class="form-check mb-0">
+            <input class="form-check-input filter-priority" type="checkbox" value="Basse" id="fp-basse" checked>
+            <label class="form-check-label small" for="fp-basse">
+              <span class="badge bg-success-subtle text-success-emphasis">Basse</span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Réinitialiser -->
+      <button type="button" class="btn btn-outline-secondary btn-sm mt-auto" id="btn-reset-filters">
+        <i class="bi bi-arrow-counterclockwise me-1"></i>Réinitialiser
+      </button>
+    </aside>
+
+    <!-- ── Contenu principal ── -->
+    <div class="flex-grow-1 px-4 py-2">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">Console d'administration</h4>
+        <span id="filter-count" class="badge bg-secondary text-white"></span>
+      </div>
+
+      <div id="admin-list" class="vstack gap-3"></div>
+      <p id="admin-empty" class="text-muted d-none">Aucun ticket à afficher.</p>
+    </div>
+
+  </div>
 </main>
 
 <footer class="text-center py-4">

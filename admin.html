@@ -45,6 +45,7 @@
     </div>
   </div>
 </nav>
+
 <!-- MAIN -->
 <main class="container-fluid my-4">
   <nav aria-label="breadcrumb" class="container">
@@ -96,13 +97,13 @@
             </label>
           </div>
           <div class="form-check mb-0">
-            <input class="form-check-input filter-status" type="checkbox" value="Résolu" id="fs-resolu" checked>
+            <input class="form-check-input filter-status" type="checkbox" value="Résolu" id="fs-resolu">
             <label class="form-check-label small" for="fs-resolu">
               <span class="badge bg-info-subtle text-info-emphasis">Résolu</span>
             </label>
           </div>
           <div class="form-check mb-0">
-            <input class="form-check-input filter-status" type="checkbox" value="Fermé" id="fs-ferme" checked>
+            <input class="form-check-input filter-status" type="checkbox" value="Fermé" id="fs-ferme">
             <label class="form-check-label small" for="fs-ferme">
               <span class="badge bg-secondary-subtle text-secondary-emphasis">Fermé</span>
             </label>
@@ -115,25 +116,25 @@
         <p class="mb-2" style="font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: #6c757d;">Priorité</p>
         <div class="d-flex flex-column gap-2">
           <div class="form-check mb-0">
-            <input class="form-check-input filter-priority" type="checkbox" value="Critique" id="fp-critique" checked>
+            <input class="form-check-input filter-priority" type="checkbox" value="Critique" id="fp-critique">
             <label class="form-check-label small" for="fp-critique">
               <span class="badge bg-danger-subtle text-danger-emphasis">Critique</span>
             </label>
           </div>
           <div class="form-check mb-0">
-            <input class="form-check-input filter-priority" type="checkbox" value="Haute" id="fp-haute" checked>
+            <input class="form-check-input filter-priority" type="checkbox" value="Haute" id="fp-haute">
             <label class="form-check-label small" for="fp-haute">
               <span class="badge bg-warning-subtle text-warning-emphasis">Haute</span>
             </label>
           </div>
           <div class="form-check mb-0">
-            <input class="form-check-input filter-priority" type="checkbox" value="Moyenne" id="fp-moyenne" checked>
+            <input class="form-check-input filter-priority" type="checkbox" value="Moyenne" id="fp-moyenne">
             <label class="form-check-label small" for="fp-moyenne">
               <span class="badge bg-primary-subtle text-primary-emphasis">Moyenne</span>
             </label>
           </div>
           <div class="form-check mb-0">
-            <input class="form-check-input filter-priority" type="checkbox" value="Basse" id="fp-basse" checked>
+            <input class="form-check-input filter-priority" type="checkbox" value="Basse" id="fp-basse">
             <label class="form-check-label small" for="fp-basse">
               <span class="badge bg-success-subtle text-success-emphasis">Basse</span>
             </label>
@@ -276,9 +277,7 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════
-     Modal Affecter le ticket  ← NOUVEAU
-══════════════════════════════════════════════════ -->
+<!-- Modal Affecter le ticket -->
 <div class="modal fade" id="assignModal" tabindex="-1" aria-labelledby="assignModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">

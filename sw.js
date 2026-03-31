@@ -1,4 +1,4 @@
-const CACHE_NAME = 'Ticket_GLPI_V1.0.0';
+const CACHE_NAME = 'Ticket_GLPI_V1.0.2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -17,6 +17,7 @@ const STATIC_ASSETS = [
   '/assets/js/firebase-init.js',
   '/assets/js/login.js',
   '/assets/js/profil.js',
+  '/assets/js/session-guard.js',
   '/assets/js/stats.js',
   '/assets/js/tickets.js',
   '/assets/js/users.js',
@@ -26,12 +27,12 @@ const STATIC_ASSETS = [
 // Installation du Service Worker - SOUPLE (pas de blocage)
 self.addEventListener('install', (event) => {
   console.log('🔧 Service Worker installation en cours...');
-  
+
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => {
         console.log('📦 Cache ouvert');
-        
+
         // Mettre en cache les fichiers un par un (sans bloquer)
         STATIC_ASSETS.forEach((asset) => {
           fetch(asset)
@@ -45,7 +46,8 @@ self.addEventListener('install', (event) => {
               console.warn(`⚠️ ${asset} non trouvé (ce n'est pas grave)`);
             });
         });
-        
+
+        // Force l'activation immédiate sans attendre la fermeture des onglets
         self.skipWaiting();
       })
       .catch((error) => {
@@ -58,7 +60,7 @@ self.addEventListener('install', (event) => {
 // Activation du Service Worker
 self.addEventListener('activate', (event) => {
   console.log('🚀 Service Worker activation en cours...');
-  
+
   event.waitUntil(
     caches.keys()
       .then((cacheNames) => {
@@ -73,6 +75,7 @@ self.addEventListener('activate', (event) => {
       })
       .then(() => {
         console.log('✅ Activation terminée');
+        // Prend le contrôle immédiat de tous les onglets ouverts
         return self.clients.claim();
       })
   );
@@ -94,36 +97,32 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Stratégie pour les assets statiques (CSS, JS, images)
-  if (request.destination === 'style' || 
-      request.destination === 'script' || 
+  if (request.destination === 'style' ||
+      request.destination === 'script' ||
       request.destination === 'image') {
-    
+
     event.respondWith(
       caches.match(request)
         .then((response) => {
-          // Si en cache, retourner immédiatement
           if (response) {
             return response;
           }
-          
-          // Sinon, fetch et mettre en cache
+
           return fetch(request)
             .then((response) => {
               if (!response || response.status !== 200) {
                 return response;
               }
-              
-              // Cloner et mettre en cache
+
               const responseToCache = response.clone();
               caches.open(CACHE_NAME)
                 .then((cache) => {
                   cache.put(request, responseToCache);
                 });
-              
+
               return response;
             })
             .catch(() => {
-              // Fallback en cas d'erreur
               if (request.destination === 'image') {
                 return caches.match('/assets/img/logo-technicentre.svg')
                   .catch(() => new Response('Image non disponible', { status: 404 }));
@@ -139,7 +138,6 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        // Cacher les réponses valides
         if (response && response.status === 200) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME)
@@ -150,19 +148,17 @@ self.addEventListener('fetch', (event) => {
         return response;
       })
       .catch(() => {
-        // Mode hors ligne: essayer le cache
         return caches.match(request)
           .then((response) => {
             if (response) {
               return response;
             }
-            
-            // Fallback pour les pages HTML
+
             if (request.headers.get('accept')?.includes('text/html')) {
               return caches.match('/index.html')
                 .catch(() => new Response('Page non disponible (hors ligne)', { status: 503 }));
             }
-            
+
             return new Response('Hors ligne - Ressource non disponible', { status: 503 });
           });
       })
@@ -175,7 +171,7 @@ self.addEventListener('message', (event) => {
     console.log('📤 Mise à jour du SW...');
     self.skipWaiting();
   }
-  
+
   if (event.data && event.data.type === 'CLEAR_CACHE') {
     console.log('🗑️ Vidage du cache...');
     caches.delete(CACHE_NAME);
@@ -192,5 +188,3 @@ self.addEventListener('sync', (event) => {
     );
   }
 });
-
-console.log('✨ Service Worker chargé - Version:', CACHE_NAME);

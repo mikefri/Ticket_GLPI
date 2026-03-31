@@ -105,6 +105,20 @@
     .lb-nav:disabled { opacity: 0.2; cursor: default; }
     .lb-prev { left: 1rem; }
     .lb-next { right: 1rem; }
+
+    /* ── FIX : Bulles chat en mode édition ── */
+    .chat-bubble {
+      min-width: 270px;
+      width: fit-content;
+      max-width: 85%;
+    }
+    .chat-edit-area {
+      width: 100%;
+    }
+    .chat-edit-area textarea {
+      width: 100%;
+      box-sizing: border-box;
+    }
   </style>
 </head>
 <body>
@@ -177,9 +191,7 @@
         <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
           <div>
             <h3 class="mb-2" id="ticket-title">Titre du ticket</h3>
-            <div id="ticket-badges">
-              <!-- Badges statut, priorité -->
-            </div>
+            <div id="ticket-badges"></div>
           </div>
           <div class="text-end">
             <small class="d-block opacity-75">Ticket #<span id="ticket-id"></span></small>
@@ -236,7 +248,7 @@
         </div>
       </div>
 
-      <!-- ✅ PIÈCES JOINTES — seul ajout dans le HTML -->
+      <!-- Pièces jointes -->
       <div class="info-section d-none" id="attachments-section">
         <div class="info-label">
           <i class="bi bi-paperclip me-1"></i>Pièces jointes

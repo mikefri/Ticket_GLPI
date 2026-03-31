@@ -375,43 +375,48 @@ function loadComments(ticketId) {
           </div>
         `;
 
-        // ── Bouton MODIFIER : on capture la largeur avant de basculer ──
+        // ── Bouton MODIFIER ──
         bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
           const bubbleEl = bubble.querySelector('.chat-bubble');
+          const messageEl = bubble; // le wrapper .chat-message
           const textEl   = document.getElementById(`chat-text-${commentId}`);
           const editArea = document.getElementById(`chat-edit-${commentId}`);
           const ta       = editArea?.querySelector('textarea');
 
-          // Capturer la taille actuelle de la bulle AVANT de masquer le texte
-          const currentWidth  = bubbleEl.offsetWidth;
-          const currentHeight = bubbleEl.offsetHeight;
+          // Figer la largeur EXACTE du wrapper .chat-message et de la bulle
+          const msgWidth = messageEl.offsetWidth;
+          const bubbleWidth = bubbleEl.offsetWidth;
+          const bubbleHeight = bubbleEl.offsetHeight;
 
-          // Figer la taille minimale de la bulle
-          bubbleEl.style.minWidth  = currentWidth + 'px';
-          bubbleEl.style.minHeight = currentHeight + 'px';
+          messageEl.style.width = msgWidth + 'px';
+          bubbleEl.style.width = bubbleWidth + 'px';
+          bubbleEl.style.minHeight = bubbleHeight + 'px';
 
           // Basculer l'affichage
           textEl.classList.add('d-none');
           editArea.classList.remove('d-none');
 
           if (ta) {
-            // Ajuster le textarea à la hauteur du texte
+            ta.style.width = '100%';
+            ta.style.boxSizing = 'border-box';
             ta.style.height = 'auto';
-            ta.style.height = ta.scrollHeight + 'px';
+            ta.style.height = Math.max(ta.scrollHeight, bubbleHeight - 80) + 'px';
             ta.focus();
             ta.selectionStart = ta.selectionEnd = ta.value.length;
           }
         });
 
-        // ── Bouton ANNULER : on relâche les contraintes de taille ──
+        // ── Bouton ANNULER ──
         bubble.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {
           const bubbleEl = bubble.querySelector('.chat-bubble');
+          const messageEl = bubble;
 
           document.getElementById(`chat-text-${commentId}`)?.classList.remove('d-none');
           document.getElementById(`chat-edit-${commentId}`)?.classList.add('d-none');
 
-          // Relâcher les tailles figées
-          bubbleEl.style.minWidth  = '';
+          // Relâcher toutes les tailles figées
+          messageEl.style.width = '';
+          bubbleEl.style.width = '';
           bubbleEl.style.minHeight = '';
         });
 
@@ -432,9 +437,10 @@ function loadComments(ticketId) {
             });
             await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
 
-            // Relâcher les tailles figées après sauvegarde
+            // Relâcher les tailles figées
             const bubbleEl = bubble.querySelector('.chat-bubble');
-            bubbleEl.style.minWidth  = '';
+            bubble.style.width = '';
+            bubbleEl.style.width = '';
             bubbleEl.style.minHeight = '';
 
             toast('Message modifié');

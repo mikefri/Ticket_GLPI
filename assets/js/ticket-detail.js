@@ -376,16 +376,19 @@ function loadComments(ticketId) {
           </div>
         `;
 
-        // ── Ouvrir l'édition : on cale la hauteur du textarea sur son contenu ──
+        // ── Ouvrir l'édition : on mesure la hauteur du texte AVANT de le cacher ──
         bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
-          document.getElementById(`chat-text-${commentId}`)?.classList.add('d-none');
+          const textEl = document.getElementById(`chat-text-${commentId}`);
+          // Capturer la hauteur rendue du texte original
+          const textHeight = textEl ? textEl.offsetHeight : 0;
+          textEl?.classList.add('d-none');
+
           const editArea = document.getElementById(`chat-edit-${commentId}`);
           editArea?.classList.remove('d-none');
           const ta = editArea?.querySelector('textarea');
           if (ta) {
-            // Auto-size pour conserver la hauteur de la bulle
-            ta.style.height = 'auto';
-            ta.style.height = Math.max(ta.scrollHeight, 60) + 'px';
+            // Imposer exactement la même hauteur → la bulle ne bouge pas
+            ta.style.height = Math.max(textHeight, 36) + 'px';
             ta.focus();
             ta.selectionStart = ta.selectionEnd = ta.value.length;
           }

@@ -361,14 +361,14 @@ function loadComments(ticketId) {
             ` : ''}
             <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
             <div class="chat-text" id="chat-text-${commentId}">${linkify(comment.text || '')}</div>
-            <div class="chat-edit-area d-none" id="chat-edit-${commentId}" style="position:relative;">
-              <textarea class="form-control form-control-sm" rows="2" style="resize:none;overflow:hidden;padding-bottom:34px;">${escapeHtml(comment.text || '')}</textarea>
-              <div style="position:absolute;bottom:6px;right:6px;display:flex;gap:6px;z-index:1;">
-                <button class="btn btn-sm btn-success btn-save-edit" title="Sauvegarder (Entrée)">
-                  <i class="bi bi-check-lg"></i>
+            <div class="chat-edit-area d-none" id="chat-edit-${commentId}">
+              <textarea class="form-control form-control-sm mb-2" rows="2">${escapeHtml(comment.text || '')}</textarea>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-success btn-save-edit">
+                  <i class="bi bi-check-lg me-1"></i>Sauvegarder
                 </button>
-                <button class="btn btn-sm btn-secondary btn-cancel-edit" title="Annuler (Échap)">
-                  <i class="bi bi-x-lg"></i>
+                <button class="btn btn-sm btn-secondary btn-cancel-edit">
+                  <i class="bi bi-x-lg me-1"></i>Annuler
                 </button>
               </div>
             </div>
@@ -376,22 +376,12 @@ function loadComments(ticketId) {
           </div>
         `;
 
-        // ── Ouvrir l'édition : on mesure la hauteur du texte AVANT de le cacher ──
         bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
-          const textEl = document.getElementById(`chat-text-${commentId}`);
-          // Capturer la hauteur rendue du texte original
-          const textHeight = textEl ? textEl.offsetHeight : 0;
-          textEl?.classList.add('d-none');
-
+          document.getElementById(`chat-text-${commentId}`)?.classList.add('d-none');
           const editArea = document.getElementById(`chat-edit-${commentId}`);
           editArea?.classList.remove('d-none');
           const ta = editArea?.querySelector('textarea');
-          if (ta) {
-            // Imposer exactement la même hauteur → la bulle ne bouge pas
-            ta.style.height = Math.max(textHeight, 36) + 'px';
-            ta.focus();
-            ta.selectionStart = ta.selectionEnd = ta.value.length;
-          }
+          if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
         });
 
         bubble.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {

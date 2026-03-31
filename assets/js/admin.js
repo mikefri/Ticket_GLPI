@@ -15,8 +15,8 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth
 // ────────────────────────────────────────────────
 // DOM
 // ────────────────────────────────────────────────
-const elList    = document.getElementById('admin-list');
-const elEmpty   = document.getElementById('admin-empty');
+const elList      = document.getElementById('admin-list');
+const elEmpty     = document.getElementById('admin-empty');
 const inputSearch = document.getElementById('search');
 
 // Helpers checkboxes
@@ -274,8 +274,12 @@ document.querySelectorAll('.filter-status, .filter-priority').forEach(el =>
 
 inputSearch?.addEventListener('input', refreshList);
 
+// Réinitialiser : Ouvert / En cours / En attente cochés, Résolu / Fermé décochés
 document.getElementById('btn-reset-filters')?.addEventListener('click', () => {
-  document.querySelectorAll('.filter-status, .filter-priority').forEach(el => el.checked = true);
+  document.querySelectorAll('.filter-status').forEach(el => {
+    el.checked = ['Ouvert', 'En cours', 'En attente'].includes(el.value);
+  });
+  document.querySelectorAll('.filter-priority').forEach(el => el.checked = false);
   if (inputSearch) inputSearch.value = '';
   refreshList();
 });

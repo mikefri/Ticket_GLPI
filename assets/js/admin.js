@@ -15,19 +15,22 @@ import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth
 // ────────────────────────────────────────────────
 // DOM
 // ────────────────────────────────────────────────
-const elList       = document.getElementById('admin-list');
-const elEmpty      = document.getElementById('admin-empty');
-const filterStatus = document.getElementById('filter-status');
-const inputSearch  = document.getElementById('search');
+const elList    = document.getElementById('admin-list');
+const elEmpty   = document.getElementById('admin-empty');
+const inputSearch = document.getElementById('search');
+
+// Helpers checkboxes
+const filterStatusEls   = () => [...document.querySelectorAll('.filter-status:checked')].map(el => el.value);
+const filterPriorityEls = () => [...document.querySelectorAll('.filter-priority:checked')].map(el => el.value);
 
 // ────────────────────────────────────────────────
 // État
 // ────────────────────────────────────────────────
-let data           = [];
+let data            = [];
 let pendingDeleteId = null;
-let modalDelete    = null;
-let modalEdit      = null;
-let currentEditId  = null;
+let modalDelete     = null;
+let modalEdit       = null;
+let currentEditId   = null;
 
 // ── État modal affectation ──
 let modalAssign     = null;
@@ -216,15 +219,22 @@ function renderItem(d) {
 // Rafraîchissement liste
 // ────────────────────────────────────────────────
 function refreshList() {
-  const q  = (inputSearch.value || '').toLowerCase();
-  const fs = filterStatus.value;
+  const q          = (inputSearch?.value || '').toLowerCase();
+  const statuses   = filterStatusEls();
+  const priorities = filterPriorityEls();
 
   const filtered = data.filter(d => {
     const t = d.data();
-    const matchStatus = fs ? t.status === fs : true;
+    const matchStatus   = statuses.length === 0   || statuses.includes(t.status);
+    const matchPriority = priorities.length === 0  || priorities.includes(t.priority);
     const hay = `${t.title} ${t.description} ${t.email} ${t.category} ${t.type || ''}`.toLowerCase();
-    return (fs === '' || matchStatus) && (!q || hay.includes(q));
+    const matchSearch   = !q || hay.includes(q);
+    return matchStatus && matchPriority && matchSearch;
   });
+
+  // Compteur
+  const countEl = document.getElementById('filter-count');
+  if (countEl) countEl.textContent = `${filtered.length} ticket${filtered.length > 1 ? 's' : ''}`;
 
   filtered.sort((a, b) => {
     const ta = a.data(), tb = b.data();
@@ -256,10 +266,19 @@ function refreshList() {
 }
 
 // ────────────────────────────────────────────────
-// Listeners – filtres
+// Listeners – filtres sidebar
 // ────────────────────────────────────────────────
-filterStatus?.addEventListener('change', refreshList);
+document.querySelectorAll('.filter-status, .filter-priority').forEach(el =>
+  el.addEventListener('change', refreshList)
+);
+
 inputSearch?.addEventListener('input', refreshList);
+
+document.getElementById('btn-reset-filters')?.addEventListener('click', () => {
+  document.querySelectorAll('.filter-status, .filter-priority').forEach(el => el.checked = true);
+  if (inputSearch) inputSearch.value = '';
+  refreshList();
+});
 
 // ────────────────────────────────────────────────
 // Listener – Changement de statut

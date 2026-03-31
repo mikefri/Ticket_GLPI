@@ -81,7 +81,7 @@ function displayTicket(ticket) {
   const descriptionEl = document.getElementById('ticket-description');
   descriptionEl.innerHTML = linkify(ticket.description) || 'Aucune description fournie.';
 
-  // ✅ Pièces jointes
+  // Pièces jointes
   if (ticket.attachments && ticket.attachments.length > 0) {
     displayAttachments(ticket.attachments);
   }
@@ -92,7 +92,7 @@ function displayTicket(ticket) {
 }
 
 // ─────────────────────────────────────────────
-// ✅ AFFICHAGE DES PIÈCES JOINTES (Base64)
+// AFFICHAGE DES PIÈCES JOINTES (Base64)
 // ─────────────────────────────────────────────
 function displayAttachments(attachments) {
   const section = document.getElementById('attachments-section');
@@ -121,7 +121,6 @@ function displayAttachments(attachments) {
       list.appendChild(img);
 
     } else {
-      // Fichier non-image (PDF, etc.)
       const a = document.createElement('a');
       a.href      = att.data;
       a.download  = att.name || 'fichier';
@@ -139,7 +138,7 @@ function displayAttachments(attachments) {
 }
 
 // ─────────────────────────────────────────────
-// ✅ LIGHTBOX
+// LIGHTBOX
 // ─────────────────────────────────────────────
 function openLightbox(images, startIdx) {
   document.getElementById('__lightbox')?.remove();
@@ -376,19 +375,47 @@ function loadComments(ticketId) {
           </div>
         `;
 
+        // ── Bouton MODIFIER : on capture la largeur avant de basculer ──
         bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
-          document.getElementById(`chat-text-${commentId}`)?.classList.add('d-none');
+          const bubbleEl = bubble.querySelector('.chat-bubble');
+          const textEl   = document.getElementById(`chat-text-${commentId}`);
           const editArea = document.getElementById(`chat-edit-${commentId}`);
-          editArea?.classList.remove('d-none');
-          const ta = editArea?.querySelector('textarea');
-          if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
+          const ta       = editArea?.querySelector('textarea');
+
+          // Capturer la taille actuelle de la bulle AVANT de masquer le texte
+          const currentWidth  = bubbleEl.offsetWidth;
+          const currentHeight = bubbleEl.offsetHeight;
+
+          // Figer la taille minimale de la bulle
+          bubbleEl.style.minWidth  = currentWidth + 'px';
+          bubbleEl.style.minHeight = currentHeight + 'px';
+
+          // Basculer l'affichage
+          textEl.classList.add('d-none');
+          editArea.classList.remove('d-none');
+
+          if (ta) {
+            // Ajuster le textarea à la hauteur du texte
+            ta.style.height = 'auto';
+            ta.style.height = ta.scrollHeight + 'px';
+            ta.focus();
+            ta.selectionStart = ta.selectionEnd = ta.value.length;
+          }
         });
 
+        // ── Bouton ANNULER : on relâche les contraintes de taille ──
         bubble.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {
+          const bubbleEl = bubble.querySelector('.chat-bubble');
+
           document.getElementById(`chat-text-${commentId}`)?.classList.remove('d-none');
           document.getElementById(`chat-edit-${commentId}`)?.classList.add('d-none');
+
+          // Relâcher les tailles figées
+          bubbleEl.style.minWidth  = '';
+          bubbleEl.style.minHeight = '';
         });
 
+        // ── Bouton SAUVEGARDER ──
         bubble.querySelector('.btn-save-edit')?.addEventListener('click', async () => {
           const textarea = bubble.querySelector('.chat-edit-area textarea');
           const newText = textarea?.value?.trim();
@@ -404,6 +431,12 @@ function loadComments(ticketId) {
               editedAt: Timestamp.now()
             });
             await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
+
+            // Relâcher les tailles figées après sauvegarde
+            const bubbleEl = bubble.querySelector('.chat-bubble');
+            bubbleEl.style.minWidth  = '';
+            bubbleEl.style.minHeight = '';
+
             toast('Message modifié');
           } catch (error) {
             console.error('[chat] Erreur modification:', error);
@@ -413,6 +446,7 @@ function loadComments(ticketId) {
           }
         });
 
+        // ── Raccourcis clavier dans le textarea d'édition ──
         bubble.querySelector('.chat-edit-area textarea')?.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -423,6 +457,7 @@ function loadComments(ticketId) {
           }
         });
 
+        // ── Bouton SUPPRIMER ──
         bubble.querySelector('.btn-chat-delete')?.addEventListener('click', async () => {
           if (!confirm('Supprimer ce message définitivement ?')) return;
           try {

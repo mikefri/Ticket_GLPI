@@ -175,3 +175,9 @@ if (btnLogout) {
     }
   });
 }
+// Reload automatique quand un nouveau SW prend le contrôle
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}

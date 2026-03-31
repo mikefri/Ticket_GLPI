@@ -362,7 +362,7 @@ function loadComments(ticketId) {
             <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
             <div class="chat-text" id="chat-text-${commentId}">${linkify(comment.text || '')}</div>
             <div class="chat-edit-area d-none" id="chat-edit-${commentId}">
-              <textarea class="form-control form-control-sm mb-2" rows="2">${escapeHtml(comment.text || '')}</textarea>
+              <textarea class="form-control form-control-sm mb-2" rows="2" style="resize:none;overflow:hidden;">${escapeHtml(comment.text || '')}</textarea>
               <div class="d-flex gap-2">
                 <button class="btn btn-sm btn-success btn-save-edit">
                   <i class="bi bi-check-lg me-1"></i>Sauvegarder
@@ -376,12 +376,19 @@ function loadComments(ticketId) {
           </div>
         `;
 
+        // ── Ouvrir l'édition : on cale la hauteur du textarea sur son contenu ──
         bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
           document.getElementById(`chat-text-${commentId}`)?.classList.add('d-none');
           const editArea = document.getElementById(`chat-edit-${commentId}`);
           editArea?.classList.remove('d-none');
           const ta = editArea?.querySelector('textarea');
-          if (ta) { ta.focus(); ta.selectionStart = ta.selectionEnd = ta.value.length; }
+          if (ta) {
+            // Auto-size pour conserver la hauteur de la bulle
+            ta.style.height = 'auto';
+            ta.style.height = Math.max(ta.scrollHeight, 60) + 'px';
+            ta.focus();
+            ta.selectionStart = ta.selectionEnd = ta.value.length;
+          }
         });
 
         bubble.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {

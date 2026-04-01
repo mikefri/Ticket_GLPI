@@ -1,4 +1,4 @@
-const CACHE_NAME = 'Ticket_GLPI_V1.0.3';
+const CACHE_NAME = 'Ticket_GLPI_V1.0.4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

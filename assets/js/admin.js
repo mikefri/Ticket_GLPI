@@ -238,9 +238,19 @@ function refreshList() {
 
   filtered.sort((a, b) => {
     const ta = a.data(), tb = b.data();
+
+    // 1. Statut
     const statusDiff = (STATUS_ORDER[ta.status] ?? 99) - (STATUS_ORDER[tb.status] ?? 99);
     if (statusDiff !== 0) return statusDiff;
-    return (PRIORITY_ORDER[ta.priority] ?? 99) - (PRIORITY_ORDER[tb.priority] ?? 99);
+
+    // 2. Priorité
+    const priorityDiff = (PRIORITY_ORDER[ta.priority] ?? 99) - (PRIORITY_ORDER[tb.priority] ?? 99);
+    if (priorityDiff !== 0) return priorityDiff;
+
+    // 3. Date — du plus récent au plus ancien
+    const dateA = ta.createdAt?.toDate ? ta.createdAt.toDate() : new Date(ta.createdAt ?? 0);
+    const dateB = tb.createdAt?.toDate ? tb.createdAt.toDate() : new Date(tb.createdAt ?? 0);
+    return dateB - dateA;
   });
 
   elList.innerHTML = '';

@@ -1,12 +1,32 @@
 {
-  "name": "assistant-glpi-proxy",
+  "name": "ticket-glpi",
   "version": "1.0.0",
-  "description": "Proxy sécurisé pour Assistant GLPI",
-  "main": "api/chat.js",
-  "dependencies": {
-    "node-fetch": "^3.3.2"
+  "description": "Système de ticketing GLPI moderne",
+  "main": "index.html",
+  "scripts": {
+    "dev": "live-server --port=3000 --open=index.html",
+    "build:css": "npm run build:clean && npm run build:concat && npm run build:minify",
+    "build:clean": "rimraf assets/css/prod",
+    "build:concat": "mkdir -p assets/css/prod && concat -o assets/css/prod/main.css assets/css/_variables.css assets/css/_components.css assets/css/_utilities.css assets/css/styles.css assets/css/dark-theme.css assets/css/tickets.css assets/css/stats-v2.css assets/css/stats-tech.css",
+    "build:minify": "cleancss -o assets/css/prod/main.min.css assets/css/prod/main.css --source-map",
+    "build:purge": "purgecss --css assets/css/prod/main.css --content *.html assets/js/*.js --output assets/css/prod/purged/",
+    "build": "npm run build:css && npm run build:purge",
+    "serve": "http-server -p 8080 -c-1"
   },
-  "engines": {
-    "node": "24.x"
-  }
+  "devDependencies": {
+    "clean-css-cli": "^5.6.2",
+    "concat": "^1.0.3",
+    "live-server": "^1.2.2",
+    "purgecss": "^5.0.0",
+    "rimraf": "^4.4.1",
+    "http-server": "^14.1.1"
+  },
+  "keywords": [
+    "ticketing",
+    "glpi",
+    "support",
+    "helpdesk"
+  ],
+  "author": "Micfri",
+  "license": "MIT"
 }

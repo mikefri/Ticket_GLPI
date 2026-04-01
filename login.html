@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <title>Connexion — Centre d’assistance – Méthodes Logistiques</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- REMPLACER BOOTSTRAP CDN PAR VOTRE CSS -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="manifest" href="./manifest.json">
   <meta name="theme-color" content="#1f2937">
   <link rel="icon" type="image/png" href="./assets/img/GLPI.png">
-  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="stylesheet" href="assets/css/prod/main.min.css">
 </head>
 <body>
 
@@ -25,7 +25,7 @@
 
   <!-- MAIN -->
   <main class="container my-5" style="max-width: 560px;">
-    <div class="card soft shadow-sm">
+    <div class="card soft">
       <div class="card-body p-4">
         <h4 class="mb-3">Connexion</h4>
 
@@ -55,21 +55,18 @@
 
           <div class="d-flex gap-2">
             <button class="btn btn-primary" type="submit" id="btn-login">Se connecter</button>
-            <!-- Optionnel: bouton d'inscription -->
-            <!-- <button class="btn btn-outline-secondary" type="button" id="btn-register">Créer un compte</button> -->
           </div>
         </form>
       </div>
     </div>
   </main>
 
-  <!-- Bootstrap JS (si tu utilises toasts/modales bootstrap) -->
+  <!-- Bootstrap JS pour les fonctionnalités -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" defer></script>
 
   <!-- Firebase + app -->
   <script type="module" src="assets/js/firebase-init.js"></script>
   <script type="module" src="assets/js/app.js"></script>
-  <!-- Ton script de login -->
   <script type="module" src="assets/js/login.js"></script>
 </body>
 </html>

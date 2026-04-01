@@ -1,0 +1,198 @@
+/* ===== DARK THEME OVERRIDES ===== */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Surcharges spécifiques pour le dark theme */
+[data-theme="dark"] .card.soft {
+  border-color: var(--border-dark);
+  box-shadow: var(--shadow-md);
+}
+
+[data-theme="dark"] .card-header.soft {
+  border-bottom-color: var(--border-dark);
+}
+
+[data-theme="dark"] #chat-container {
+  background: var(--gray-800);
+  border-top-color: var(--border-dark);
+}
+
+[data-theme="dark"] .chat-bubble {
+  background: var(--gray-700);
+  border-color: var(--border-dark);
+}
+
+[data-theme="dark"] .chat-message.admin-message .chat-bubble {
+  background: var(--gray-700);
+}
+
+[data-theme="dark"] .chat-message.user-message .chat-bubble {
+  background: var(--brand-gradient);
+}
+
+[data-theme="dark"] #chat-input-area {
+  background: var(--gray-800);
+  border-top-color: var(--border-dark);
+}
+
+[data-theme="dark"] #new-comment {
+  background: var(--gray-700);
+  border-color: var(--border-dark);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] #new-comment:focus {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(202, 0, 93, 0.2);
+}
+
+[data-theme="dark"] .attachment-item {
+  background: var(--gray-700);
+  border-color: var(--border-dark);
+}
+
+[data-theme="dark"] .info-section {
+  border-bottom-color: var(--border-dark);
+}
+
+[data-theme="dark"] .breadcrumb-item a {
+  color: var(--text-secondary);
+}
+
+[data-theme="dark"] .breadcrumb-item.active {
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] footer {
+  border-top-color: var(--border-dark);
+}
+
+[data-theme="dark"] .btn-chat-action {
+  background: rgba(36, 36, 36, 0.95);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .btn-chat-action:hover {
+  background: var(--gray-600);
+}
+
+[data-theme="dark"] .chat-edit-area textarea {
+  background: var(--gray-700);
+  border-color: var(--border-dark);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .chat-edit-area textarea:focus {
+  border-color: var(--info);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* Scrollbar dark theme */
+[data-theme="dark"] #chat-messages::-webkit-scrollbar-thumb {
+  background: var(--gray-600);
+}
+
+[data-theme="dark"] #chat-messages::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-500);
+}
+
+/* Améliorations de lisibilité en dark mode */
+[data-theme="dark"] {
+  --bs-body-color: var(--text-primary);
+  --bs-body-bg: var(--bg-body);
+}
+
+[data-theme="dark"] .form-control {
+  background-color: var(--gray-700);
+  border-color: var(--border-dark);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .form-control:focus {
+  background-color: var(--gray-700);
+  border-color: var(--brand-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .form-select {
+  background-color: var(--gray-700);
+  border-color: var(--border-dark);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .form-select:focus {
+  background-color: var(--gray-700);
+  border-color: var(--brand-primary);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .table {
+  --bs-table-bg: var(--card-bg);
+  --bs-table-border-color: var(--border-dark);
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.05);
+  --bs-table-active-bg: rgba(255, 255, 255, 0.1);
+  --bs-table-hover-bg: rgba(255, 255, 255, 0.075);
+  color: var(--text-primary);
+}
+
+[data-theme="dark"] .modal-content {
+  --bs-modal-bg: var(--card-bg);
+  --bs-modal-border-color: var(--border-dark);
+  --bs-modal-header-border-color: var(--border-dark);
+  --bs-modal-footer-border-color: var(--border-dark);
+}
+
+[data-theme="dark"] .toast {
+  --bs-toast-bg: var(--card-bg);
+  --bs-toast-border-color: var(--border-dark);
+  --bs-toast-header-bg: var(--gray-700);
+  --bs-toast-header-border-color: var(--border-dark);
+}
+
+/* Optimisations pour le dark theme */
+[data-theme="dark"] img {
+  filter: brightness(0.9) contrast(1.1);
+}
+
+[data-theme="dark"] .text-muted {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="dark"] .text-secondary {
+  color: var(--text-secondary) !important;
+}
+
+/* Support pour les préférences système */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg-body: var(--bg-body-dark);
+    --text-primary: var(--text-primary-dark);
+    --text-secondary: var(--text-secondary-dark);
+    --text-muted: var(--text-muted-dark);
+    --border-light: var(--border-light-dark);
+    --border-dark: var(--border-dark-dark);
+    --card-bg: var(--card-bg-dark);
+    --card-border: var(--card-border-dark);
+  }
+}
+
+/* Transition fluide entre les thèmes */
+[data-theme] {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+[data-theme] * {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Désactivation des transitions pour la réduction de mouvement */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme],
+  [data-theme] * {
+    transition: none !important;
+  }
+}

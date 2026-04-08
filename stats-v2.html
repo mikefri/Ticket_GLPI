@@ -28,7 +28,7 @@
         <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d'assistance</a></li>
         <li class="nav-item"><a class="nav-link" href="profil.html">Mon profil</a></li>
         <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
-        <li class="nav-item d-none" id="nav-users"><a class="nav-link" href="users.html">Utilisateurs & Rôles</a></li>
+        <li class="nav-item d-none" id="nav-users"><a class="nav-link" href="users.html">Utilisateurs &amp; Rôles</a></li>
         <li class="nav-item d-none" id="nav-stats"><a class="nav-link" href="stats-v2.html">Statistiques</a></li>
         <li class="nav-item d-none" id="nav-stats-tech"><a class="nav-link" href="stats-tech.html">Statistiques Tech</a></li>
         <li class="nav-item">
@@ -47,9 +47,9 @@
   </div>
 </nav>
 
-<main class="container-fluid my-4 px-4">
+<main class="container-fluid my-3 px-4">
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-shrink-0">
     <h4 class="mb-0 stats-title">
       <span id="user-display">ED</span> - [Demandes &amp; Incidents] par statut
     </h4>
@@ -59,7 +59,8 @@
   </div>
 
   <!-- Colonnes par statut -->
-  <div class="row g-3 mb-4">
+  <div class="row g-3 stats-row">
+
     <!-- Nouveaux / Ouverts -->
     <div class="col-12 col-lg-3">
       <div class="stat-column stat-new">
@@ -146,7 +147,9 @@
         </div>
       </div>
     </div>
+
   </div>
+  <!-- /row -->
 
   <!-- Indicateurs du bas -->
   <div class="stat-footer">
@@ -179,10 +182,6 @@
 
 </main>
 
-<footer class="text-center py-4 mt-5">
-  <small>© 2026 • Centre d'assistance – Méthodes Logistiques</small>
-</footer>
-
 <!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
@@ -196,9 +195,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- Module de page -->
 <script type="module" src="assets/js/stats-v2.js"></script>
-<script type="module" src="assets/js/session-guard.js">
+<script type="module" src="assets/js/session-guard.js"></script>
+
 </body>
 </html>

@@ -1,11 +1,41 @@
-/* ===== Stats V2 - Style GLPI ===== */
+/* ===== Stats V2 - Style GLPI - Full Height ===== */
 
+/* ── Layout pleine hauteur (desktop) ── */
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+main.container-fluid {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.stats-row {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stats-row > [class*="col-"] {
+  height: 100%;
+}
+
+/* ── Titre ── */
 .stats-title {
   font-weight: 600;
   color: #333;
 }
 
-/* Colonnes de statut */
+/* ── Colonnes de statut ── */
 .stat-column {
   background: #2d2d2d;
   border-radius: 6px;
@@ -14,13 +44,15 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
-/* En-têtes des colonnes */
+/* ── En-têtes des colonnes ── */
 .stat-header {
   padding: 16px;
   text-align: center;
   border-bottom: 1px solid rgba(255,255,255,.1);
+  flex-shrink: 0;
 }
 
 .stat-count {
@@ -42,7 +74,7 @@
   opacity: 0.8;
 }
 
-/* Couleurs par statut */
+/* ── Couleurs par statut ── */
 .stat-new .stat-header {
   background: linear-gradient(135deg, #1e88e5 0%, #1565c0 100%);
   color: #fff;
@@ -67,12 +99,13 @@
 }
 .stat-solved .stat-count { color: #c8e6c9; }
 
-/* Table de tickets */
+/* ── Table de tickets ── */
 .stat-table {
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 .stat-table-header {
@@ -84,6 +117,7 @@
   text-transform: uppercase;
   padding: 8px 12px;
   border-bottom: 1px solid rgba(255,255,255,.1);
+  flex-shrink: 0;
 }
 
 .stat-table-header > div {
@@ -113,13 +147,14 @@
   flex-shrink: 0;
 }
 
+/* ── Corps scrollable — hauteur dynamique ── */
 .stat-table-body {
   flex: 1;
   overflow-y: auto;
-  max-height: 500px;
+  min-height: 0;
 }
 
-/* Lignes de tickets */
+/* ── Lignes de tickets ── */
 .ticket-row {
   display: flex;
   padding: 10px 12px;
@@ -181,11 +216,11 @@
   color: #ffa726;
 }
 
-/* Footer avec indicateurs */
+/* ── Footer avec indicateurs ── */
 .stat-footer {
   background: #2d2d2d;
   color: #ddd;
-  padding: 20px;
+  padding: 14px 20px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -193,8 +228,9 @@
   gap: 12px;
   flex-wrap: wrap;
   font-size: 1.5rem;
-  margin-top: 24px;
+  margin-top: 12px;
   box-shadow: 0 2px 8px rgba(0,0,0,.15);
+  flex-shrink: 0;
 }
 
 .stat-footer-item {
@@ -223,7 +259,7 @@
   margin: 0 4px;
 }
 
-/* État vide */
+/* ── État vide ── */
 .empty-state {
   padding: 32px 16px;
   text-align: center;
@@ -231,7 +267,7 @@
   font-size: 0.9rem;
 }
 
-/* Scrollbar personnalisée */
+/* ── Scrollbar personnalisée ── */
 .stat-table-body::-webkit-scrollbar {
   width: 8px;
 }
@@ -249,20 +285,50 @@
   background: #666;
 }
 
-/* Responsive */
+/* ── Responsive mobile (< 992px) ── */
 @media (max-width: 991px) {
+  html, body {
+    height: auto;
+    overflow: auto;
+  }
+
+  body {
+    display: block;
+  }
+
+  main.container-fluid {
+    flex: none;
+    overflow: visible;
+    display: block;
+  }
+
+  .stats-row {
+    flex: none;
+    overflow: visible;
+  }
+
+  .stats-row > [class*="col-"] {
+    height: auto;
+  }
+
   .stat-column {
+    height: auto;
     margin-bottom: 16px;
   }
-  
+
+  .stat-table-body {
+    max-height: 400px;
+  }
+
   .stat-count {
     font-size: 2.5rem;
   }
-  
+
   .stat-footer {
     font-size: 1.2rem;
+    margin-top: 0;
   }
-  
+
   .stat-footer-value {
     font-size: 1.5rem;
   }

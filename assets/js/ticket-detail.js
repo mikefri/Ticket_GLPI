@@ -2,11 +2,12 @@
 // Page de détail d'un ticket avec système de chat (+ édition et suppression des messages)
 
 import './app.js';
-import { db } from './firebase-init.js';
+import { db, auth } from './firebase-init.js';
 import { requireAuth, toast, badgeForStatus, badgeForPriority, formatDate } from './app.js';
 
 import {
-  doc, getDoc, updateDoc, deleteDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp
+  doc, getDoc, updateDoc, deleteDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp,
+  serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 let currentTicket = null;
@@ -199,6 +200,96 @@ function openLightbox(images, startIdx) {
   document.body.appendChild(overlay);
 }
 
+// ============================================================
+//  TOGGLE "TICKET NATIONAL" (portée nationale)
+// ============================================================
+function initNationalToggle(ticketId, isAdmin) {
+  const section   = document.getElementById('national-section');
+  const toggle    = document.getElementById('toggle-national');
+  const wrapper   = document.querySelector('.national-toggle-wrapper');
+  const icon      = document.getElementById('national-icon');
+  const label     = document.getElementById('national-label');
+  const hint      = document.getElementById('national-hint');
+  const flagInfo  = document.getElementById('national-flag-info');
+
+  if (!section || !toggle || !wrapper) return;
+
+  section.classList.remove('d-none');
+  toggle.disabled = !isAdmin;
+
+  const ticketRef = doc(db, 'tickets', ticketId);
+
+  // Écoute temps réel pour synchroniser l'UI
+  onSnapshot(ticketRef, (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const isNational = data.isNational === true;
+
+    // Mettre à jour le toggle sans déclencher l'événement change
+    toggle.checked = isNational;
+
+    // Apparence
+    wrapper.classList.toggle('is-national', isNational);
+    icon.innerHTML = isNational
+      ? '<i class="bi bi-globe-americas"></i>'
+      : '<i class="bi bi-globe2"></i>';
+    label.textContent = isNational ? 'Ticket national' : 'Ticket local';
+    hint.textContent = isNational
+      ? 'Ce ticket est visible dans la page de préparation des réunions.'
+      : 'Activer pour signaler ce ticket au niveau national (réunion).';
+
+    if (isNational && data.nationalFlaggedAt) {
+      const d = data.nationalFlaggedAt.toDate ? data.nationalFlaggedAt.toDate() : new Date(data.nationalFlaggedAt);
+      const formatted = d.toLocaleDateString('fr-FR', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      flagInfo.innerHTML = `<i class="bi bi-info-circle"></i> Signalé national le ${formatted}`;
+      flagInfo.classList.remove('d-none');
+    } else {
+      flagInfo.classList.add('d-none');
+    }
+  });
+
+  // Gestion du changement
+  toggle.addEventListener('change', async () => {
+    const newValue = toggle.checked;
+    toggle.disabled = true;
+
+    try {
+      const updateData = {
+        isNational: newValue,
+        nationalFlaggedAt: serverTimestamp(),
+        nationalFlaggedBy: auth.currentUser?.uid || null,
+        updatedAt: Timestamp.now()
+      };
+
+      if (!newValue) {
+        updateData.meetingStatus = null;
+        updateData.meetingNotes  = null;
+      } else {
+        updateData.meetingStatus = 'pending';
+      }
+
+      await updateDoc(ticketRef, updateData);
+
+      toast(
+        newValue
+          ? 'Ticket signalé au niveau national — il apparaît désormais dans la préparation des réunions.'
+          : 'Ticket retiré du scope national.'
+      );
+    } catch (error) {
+      console.error('[national-toggle] Erreur :', error);
+      toggle.checked = !newValue;
+      toast('Erreur lors de la mise à jour : ' + error.message);
+    } finally {
+      if (isAdmin) toggle.disabled = false;
+    }
+  });
+}
+// ============================================================
+//  /TOGGLE "TICKET NATIONAL"
+// ============================================================
+
 // Afficher les actions admin
 function displayAdminActions(ticket) {
   const actionsSection = document.getElementById('admin-actions');
@@ -378,12 +469,11 @@ function loadComments(ticketId) {
         // ── Bouton MODIFIER ──
         bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
           const bubbleEl = bubble.querySelector('.chat-bubble');
-          const messageEl = bubble; // le wrapper .chat-message
+          const messageEl = bubble;
           const textEl   = document.getElementById(`chat-text-${commentId}`);
           const editArea = document.getElementById(`chat-edit-${commentId}`);
           const ta       = editArea?.querySelector('textarea');
 
-          // Figer la largeur EXACTE du wrapper .chat-message et de la bulle
           const msgWidth = messageEl.offsetWidth;
           const bubbleWidth = bubbleEl.offsetWidth;
           const bubbleHeight = bubbleEl.offsetHeight;
@@ -392,7 +482,6 @@ function loadComments(ticketId) {
           bubbleEl.style.width = bubbleWidth + 'px';
           bubbleEl.style.minHeight = bubbleHeight + 'px';
 
-          // Basculer l'affichage
           textEl.classList.add('d-none');
           editArea.classList.remove('d-none');
 
@@ -414,7 +503,6 @@ function loadComments(ticketId) {
           document.getElementById(`chat-text-${commentId}`)?.classList.remove('d-none');
           document.getElementById(`chat-edit-${commentId}`)?.classList.add('d-none');
 
-          // Relâcher toutes les tailles figées
           messageEl.style.width = '';
           bubbleEl.style.width = '';
           bubbleEl.style.minHeight = '';
@@ -437,7 +525,6 @@ function loadComments(ticketId) {
             });
             await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
 
-            // Relâcher les tailles figées
             const bubbleEl = bubble.querySelector('.chat-bubble');
             bubble.style.width = '';
             bubbleEl.style.width = '';
@@ -637,6 +724,9 @@ document.getElementById('new-comment')?.addEventListener('input', function () {
   console.log('[ticket-detail] isAdmin:', isAdmin);
 
   await loadTicket(ticketId);
+
+  // Initialiser le toggle "Ticket national"
+  initNationalToggle(ticketId, isAdmin);
 
   console.log('[ticket-detail] ===== INITIALISATION TERMINÉE =====');
 })();

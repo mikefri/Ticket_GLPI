@@ -12,7 +12,8 @@
  *    3. Filtrer par statut de réunion et par priorité
  *    4. Calculer les compteurs (statistiques rapides)
  *    5. Gérer les notes de réunion + changement de statut (modal)
- *    6. Permettre l'impression / export de la liste
+ *    6. Afficher le lien "Groom" de chaque ticket
+ *    7. Permettre l'impression / export de la liste
  * ============================================================
  */
 
@@ -180,6 +181,7 @@ function buildRow(ticket) {
       <td>${priorityBadge(priority)}</td>
       <td><span class="badge bg-primary">${escapeHtml(status)}</span></td>
       <td>${meetingBadge(meetStatus)}</td>
+      <td>${groomCell(ticket.groomLink)}</td>
       <td class="no-print">
         <div class="btn-action-group">
           <button class="btn btn-outline-primary" data-action="notes" data-id="${id}"
@@ -419,6 +421,15 @@ function meetingBadge(status) {
     <span class="badge-meeting-status ${escapeHtml(status)}">
       <i class="bi ${info.icon}"></i> ${info.label}
     </span>`;
+}
+
+function groomCell(link) {
+  if (!link) return '<span class="text-muted">—</span>';
+  return `
+    <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"
+       class="groom-link" title="Ouvrir le ticket groom">
+      <i class="bi bi-link-45deg"></i> Groom
+    </a>`;
 }
 
 function getModal() {

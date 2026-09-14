@@ -1,5 +1,6 @@
 // assets/js/ticket-detail.js
 // Page de détail d'un ticket avec système de chat (+ édition et suppression des messages)
+// + Toggle "Ticket national" et champ "Lien Groom"
 
 import './app.js';
 import { db, auth } from './firebase-init.js';
@@ -201,7 +202,7 @@ function openLightbox(images, startIdx) {
 }
 
 // ============================================================
-//  TOGGLE "TICKET NATIONAL" (portée nationale)
+//  TOGGLE "TICKET NATIONAL" + CHAMP "LIEN GROOM"
 // ============================================================
 function initNationalToggle(ticketId, isAdmin) {
   const section   = document.getElementById('national-section');
@@ -211,11 +212,16 @@ function initNationalToggle(ticketId, isAdmin) {
   const label     = document.getElementById('national-label');
   const hint      = document.getElementById('national-hint');
   const flagInfo  = document.getElementById('national-flag-info');
+  const groomInput   = document.getElementById('groom-link');
+  const btnSaveGroom = document.getElementById('btn-save-groom');
+  const btnOpenGroom = document.getElementById('btn-open-groom');
 
   if (!section || !toggle || !wrapper) return;
 
   section.classList.remove('d-none');
   toggle.disabled = !isAdmin;
+  if (groomInput)   groomInput.disabled   = !isAdmin;
+  if (btnSaveGroom) btnSaveGroom.disabled = !isAdmin;
 
   const ticketRef = doc(db, 'tickets', ticketId);
 
@@ -225,7 +231,6 @@ function initNationalToggle(ticketId, isAdmin) {
     const data = snap.data();
     const isNational = data.isNational === true;
 
-    // Mettre à jour le toggle sans déclencher l'événement change
     toggle.checked = isNational;
 
     // Apparence
@@ -248,9 +253,22 @@ function initNationalToggle(ticketId, isAdmin) {
     } else {
       flagInfo.classList.add('d-none');
     }
+
+    // ── Champ Groom : synchronisation ──
+    if (groomInput && document.activeElement !== groomInput) {
+      groomInput.value = data.groomLink || '';
+    }
+    if (btnOpenGroom) {
+      if (data.groomLink) {
+        btnOpenGroom.href = data.groomLink;
+        btnOpenGroom.classList.remove('d-none');
+      } else {
+        btnOpenGroom.classList.add('d-none');
+      }
+    }
   });
 
-  // Gestion du changement
+  // Gestion du changement du toggle
   toggle.addEventListener('change', async () => {
     const newValue = toggle.checked;
     toggle.disabled = true;
@@ -283,6 +301,42 @@ function initNationalToggle(ticketId, isAdmin) {
       toast('Erreur lors de la mise à jour : ' + error.message);
     } finally {
       if (isAdmin) toggle.disabled = false;
+    }
+  });
+
+  // ── Sauvegarde du lien Groom ──
+  async function saveGroomLink() {
+    if (!groomInput) return;
+
+    let value = groomInput.value.trim();
+    // Ajoute https:// si manquant
+    if (value && !/^https?:\/\//i.test(value)) {
+      value = 'https://' + value;
+      groomInput.value = value;
+    }
+
+    btnSaveGroom.disabled = true;
+    try {
+      await updateDoc(ticketRef, {
+        groomLink: value || null,
+        updatedAt: Timestamp.now()
+      });
+      toast(value
+        ? 'Lien groom enregistré — visible dans la page Réunions.'
+        : 'Lien groom supprimé.');
+    } catch (error) {
+      console.error('[groom] Erreur :', error);
+      toast('Erreur lors de l’enregistrement du lien : ' + error.message);
+    } finally {
+      btnSaveGroom.disabled = !isAdmin;
+    }
+  }
+
+  btnSaveGroom?.addEventListener('click', saveGroomLink);
+  groomInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveGroomLink();
     }
   });
 }
@@ -725,7 +779,7 @@ document.getElementById('new-comment')?.addEventListener('input', function () {
 
   await loadTicket(ticketId);
 
-  // Initialiser le toggle "Ticket national"
+  // Initialiser le toggle "Ticket national" + champ "Groom"
   initNationalToggle(ticketId, isAdmin);
 
   console.log('[ticket-detail] ===== INITIALISATION TERMINÉE =====');

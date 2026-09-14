@@ -391,12 +391,36 @@ function meetingBadge(status) {
     </span>`;
 }
 
+// ============================================================
+//  EXTRACTION DU NUMÉRO DE TICKET GROOM
+//  Ex : https://groom.pmm.sncf.fr/demandes/187013/live → "187013"
+// ============================================================
+function extractGroomNumber(link) {
+  if (!link) return null;
+
+  // Cas nominal : /demandes/XXXXX/live
+  let m = link.match(/\/demandes\/(\d+)/i);
+  if (m) return m[1];
+
+  // Repli : nombre de 4 chiffres et + dans le chemin de l'URL
+  m = link.match(/\/(\d{4,})(?:[\/?#]|$)/);
+  if (m) return m[1];
+
+  // Dernier repli : première suite de 4 chiffres et + dans l'URL
+  m = link.match(/(\d{4,})/);
+  return m ? m[1] : null;
+}
+
 function groomCell(link) {
   if (!link) return '<span class="text-muted">—</span>';
+
+  const num = extractGroomNumber(link);
+  const label = num ? '#' + num : 'Groom';
+
   return `
     <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"
-       class="groom-link" title="Ouvrir le ticket groom">
-      <i class="bi bi-link-45deg"></i> Groom
+       class="groom-link" title="Ouvrir le ticket groom : ${escapeHtml(link)}">
+      <i class="bi bi-link-45deg"></i> ${escapeHtml(label)}
     </a>`;
 }
 

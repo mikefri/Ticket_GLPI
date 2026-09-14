@@ -202,6 +202,37 @@ function openLightbox(images, startIdx) {
 }
 
 // ============================================================
+//  FILET DE SÉCURITÉ : crée le bloc groom si le HTML est ancien
+// ============================================================
+function ensureGroomField(wrapper) {
+  if (document.getElementById('groom-link')) return;
+  const anchor = document.getElementById('national-flag-info');
+  const html = `
+    <div class="national-groom-row mt-3 pt-3">
+      <label for="groom-link" class="form-label small mb-1">
+        <i class="bi bi-link-45deg me-1"></i> Ticket groom (lien)
+      </label>
+      <div class="input-group input-group-sm">
+        <input type="url" class="form-control" id="groom-link"
+               placeholder="https://... (lien vers le ticket groom)" disabled>
+        <button class="btn btn-outline-primary" type="button" id="btn-save-groom" disabled
+                title="Enregistrer le lien">
+          <i class="bi bi-save"></i>
+        </button>
+        <a href="#" class="btn btn-outline-secondary d-none" id="btn-open-groom"
+           target="_blank" rel="noopener noreferrer" title="Ouvrir le lien groom">
+          <i class="bi bi-box-arrow-up-right"></i>
+        </a>
+      </div>
+      <small class="text-muted d-block mt-1">
+        Ce lien apparaîtra dans le tableau de la page Réunions.
+      </small>
+    </div>`;
+  if (anchor) anchor.insertAdjacentHTML('beforebegin', html);
+  else if (wrapper) wrapper.insertAdjacentHTML('beforeend', html);
+}
+
+// ============================================================
 //  TOGGLE "TICKET NATIONAL" + CHAMP "LIEN GROOM"
 // ============================================================
 function initNationalToggle(ticketId, isAdmin) {
@@ -212,11 +243,14 @@ function initNationalToggle(ticketId, isAdmin) {
   const label     = document.getElementById('national-label');
   const hint      = document.getElementById('national-hint');
   const flagInfo  = document.getElementById('national-flag-info');
+
+  if (!section || !toggle || !wrapper) return;
+
+  ensureGroomField(wrapper);   // garantit la présence du champ groom
+
   const groomInput   = document.getElementById('groom-link');
   const btnSaveGroom = document.getElementById('btn-save-groom');
   const btnOpenGroom = document.getElementById('btn-open-groom');
-
-  if (!section || !toggle || !wrapper) return;
 
   section.classList.remove('d-none');
   toggle.disabled = !isAdmin;
@@ -309,7 +343,6 @@ function initNationalToggle(ticketId, isAdmin) {
     if (!groomInput) return;
 
     let value = groomInput.value.trim();
-    // Ajoute https:// si manquant
     if (value && !/^https?:\/\//i.test(value)) {
       value = 'https://' + value;
       groomInput.value = value;

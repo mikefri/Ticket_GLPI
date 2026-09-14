@@ -1,230 +1,431 @@
-/* ============================================
-   MEETINGS.CSS - Page Préparation des réunions
-   ============================================ */
+/**
+ * ============================================================
+ *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
+ * ============================================================
+ */
 
-/* ===== Mise en page large ===== */
-.meetings-container {
-  width: 96%;
-  max-width: 1900px;
-  margin-left: auto;
-  margin-right: auto;
+// ------------------------------------------------------------
+// 1. IMPORTS FIREBASE (SDK 10.7.1 — même version que firebase-init.js)
+// ------------------------------------------------------------
+import { db, auth } from './firebase-init.js';
+import {
+  collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// ------------------------------------------------------------
+// 2. CONFIGURATION & ÉTAT GLOBAL
+// ------------------------------------------------------------
+const FIELD_MAP = {
+  title:        ['title', 'titre', 'subject', 'objet'],
+  requester:    ['requesterName', 'requester', 'userName', 'demandeur', 'createdByName'],
+  category:     ['category', 'categorie'],
+  priority:     ['priority', 'priorite'],
+  status:       ['status', 'statut'],
+  ticketNumber: ['ticketNumber', 'number', 'numero'],
+  createdAt:    ['createdAt', 'dateCreation', 'created_at']
+};
+
+const MEETING_STATUS = {
+  pending:   { label: 'À traiter', icon: 'bi-hourglass-split' },
+  treated:   { label: 'Traité',    icon: 'bi-check-circle-fill' },
+  postponed: { label: 'Reporté',   icon: 'bi-arrow-repeat' }
+};
+
+let allTickets = [];
+let currentTicketId = null;
+let unsubscribe = null;
+
+const filters = { meetingStatus: '', priority: '' };
+
+// ------------------------------------------------------------
+// 3. RÉFÉRENCES DOM
+// ------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+
+const DOM = {
+  loading:          $('loading'),
+  tableContainer:   $('meetings-table-container'),
+  tableBody:        $('meetings-table-body'),
+  emptyState:       $('empty'),
+  filterStatus:     $('filter-meeting-status'),
+  filterPriority:   $('filter-priority'),
+  btnResetFilters:  $('btn-reset-filters'),
+  btnExportPdf:     $('btn-export-pdf'),
+  statTotal:        $('stat-total'),
+  statPending:      $('stat-pending'),
+  statTreated:      $('stat-treated'),
+  statPostponed:    $('stat-postponed'),
+  modalElement:     $('meetingNotesModal'),
+  modalTitle:       $('modal-ticket-title'),
+  modalInfo:        $('modal-ticket-info'),
+  modalNotes:       $('meeting-notes-textarea'),
+  modalStatus:      $('meeting-status-select'),
+  btnSaveNotes:     $('btn-save-meeting-notes'),
+  toastElement:     $('toast'),
+  toastBody:        $('toast-body')
+};
+
+// ------------------------------------------------------------
+// 4. INITIALISATION
+// ------------------------------------------------------------
+document.addEventListener('DOMContentLoaded', () => {
+  bindEvents();
+  subscribeNationalTickets();
+});
+
+function bindEvents() {
+  DOM.filterStatus.addEventListener('change', onFilterChange);
+  DOM.filterPriority.addEventListener('change', onFilterChange);
+  DOM.btnResetFilters.addEventListener('click', resetFilters);
+  DOM.btnSaveNotes.addEventListener('click', saveMeetingNotes);
+  DOM.tableBody.addEventListener('click', onTableAction);
 }
 
-/* ===== Page Header ===== */
-.page-header h1 { color: #1e293b; font-weight: 700; }
+// ------------------------------------------------------------
+// 5. ÉCOUTE TEMPS RÉEL FIRESTORE
+// ------------------------------------------------------------
+function subscribeNationalTickets() {
+  const q = query(collection(db, 'tickets'), where('isNational', '==', true));
 
-/* ===== Statistiques rapides ===== */
-.stat-card {
-  border-radius: 12px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  border: 1px solid rgba(0, 0, 0, 0.05);
-}
-.stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
-.stat-card h3 { font-weight: 700; font-size: 1.75rem; }
-
-/* ===== Barre de filtres ===== */
-.filters-bar {
-  background: #ffffff;
-  border: 1px solid #e9ecef;
-  border-radius: 12px;
-  padding: 1rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  unsubscribe = onSnapshot(q, (snapshot) => {
+    allTickets = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    allTickets.sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt));
+    refreshStats();
+    renderTable();
+    hideLoading();
+  }, (error) => {
+    console.error('[meetings] Erreur Firestore :', error);
+    showToast('Erreur lors du chargement des tickets nationaux.', 'danger');
+    hideLoading();
+  });
 }
 
-/* ===== Tableau des réunions ===== */
-.table-meetings {
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  width: 100%;
-}
-.table-meetings thead th {
-  background-color: #f8f9fa;
-  border-bottom: 2px solid #dee2e6;
-  font-weight: 600;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #6c757d;
-  padding: 0.75rem 1rem;
-  white-space: nowrap;
-}
-.table-meetings tbody td {
-  vertical-align: middle;
-  padding: 0.875rem 1rem;
-  border-bottom: 1px solid #f1f3f5;
-}
-.table-meetings tbody tr:hover { background-color: rgba(13, 110, 253, 0.02); }
-.table-meetings tbody tr:last-child td { border-bottom: none; }
+// ------------------------------------------------------------
+// 6. AFFICHAGE
+// ------------------------------------------------------------
+function renderTable() {
+  const tickets = applyFilters(allTickets);
 
-/* Colonne Titre : plus de place */
-.table-meetings th:nth-child(2),
-.table-meetings td:nth-child(2) { min-width: 340px; }
-
-/* Colonnes Demandeur / Statut Réunion : pas de retour à la ligne */
-.table-meetings th:nth-child(3),
-.table-meetings td:nth-child(3),
-.table-meetings th:nth-child(7),
-.table-meetings td:nth-child(7) { white-space: nowrap; }
-
-/* Colonne Actions : boutons sur une seule ligne */
-.table-meetings td:last-child { white-space: nowrap; }
-
-/* ===== Badges de priorité ===== */
-.badge-priority {
-  padding: 0.35rem 0.65rem;
-  border-radius: 50px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-}
-.badge-priority.critique { background-color: #dc3545; color: white; }
-.badge-priority.haute { background-color: #fd7e14; color: white; }
-.badge-priority.moyenne { background-color: #ffc107; color: #1e293b; }
-.badge-priority.basse { background-color: #20c997; color: white; }
-
-/* ===== Badges de statut réunion ===== */
-.badge-meeting-status {
-  padding: 0.35rem 0.65rem;
-  border-radius: 50px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  white-space: nowrap;
-}
-.badge-meeting-status.pending { background-color: #fff3cd; color: #856404; }
-.badge-meeting-status.treated { background-color: #d1e7dd; color: #0f5132; }
-.badge-meeting-status.postponed { background-color: #f8d7da; color: #842029; }
-
-/* ===== Badge National ===== */
-.badge-national {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 0.35rem 0.65rem;
-  border-radius: 50px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-/* ===== Lien Groom ===== */
-.groom-link {
-  display: inline-flex;
-  align-items: center;
-  gap: .35rem;
-  background: rgba(102, 126, 234, .1);
-  color: #667eea;
-  border: 1px solid rgba(102, 126, 234, .35);
-  padding: .3rem .6rem;
-  border-radius: 50px;
-  font-size: .75rem;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background .2s ease, color .2s ease;
-}
-.groom-link:hover { background: #667eea; color: #ffffff; }
-
-/* ===== Boutons d'action ===== */
-.btn-action-group { display: flex; gap: 0.25rem; flex-wrap: nowrap; }
-.btn-action-group .btn { padding: 0.375rem 0.5rem; font-size: 0.875rem; line-height: 1; }
-.btn-action-group .btn:hover { transform: scale(1.1); transition: transform 0.15s ease; }
-
-/* ===== État vide ===== */
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  background: #f8f9fa;
-  border-radius: 12px;
-  border: 2px dashed #dee2e6;
-}
-.empty-state-icon {
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.empty-state-icon i { font-size: 2.5rem; color: white; }
-
-/* ===== Modal Notes de réunion ===== */
-#meetingNotesModal .modal-content {
-  border-radius: 12px;
-  border: none;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-}
-#meetingNotesModal .modal-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 12px 12px 0 0;
-  padding: 1rem 1.5rem;
-}
-#meetingNotesModal .modal-header .btn-close { filter: brightness(0) invert(1); }
-#meetingNotesModal .modal-body { padding: 1.5rem; }
-#meetingNotesModal textarea {
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
-  resize: vertical;
-  min-height: 150px;
-}
-#meetingNotesModal textarea:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-}
-
-/* ===== Animation d'apparition ===== */
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-.fade-in { animation: fadeIn 0.4s ease forwards; }
-
-/* ===== Scrollbar personnalisée ===== */
-.table-responsive::-webkit-scrollbar { height: 6px; }
-.table-responsive::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 3px; }
-.table-responsive::-webkit-scrollbar-thumb { background: #adb5bd; border-radius: 3px; }
-.table-responsive::-webkit-scrollbar-thumb:hover { background: #6c757d; }
-
-/* ===== Responsive ===== */
-@media (max-width: 768px) {
-  .page-header h1 { font-size: 1.25rem; }
-  .stat-card h3 { font-size: 1.25rem; }
-  .table-meetings { font-size: 0.85rem; }
-  .table-meetings thead th { font-size: 0.7rem; padding: 0.5rem; }
-  .table-meetings tbody td { padding: 0.5rem; }
-  .table-meetings th:nth-child(2),
-  .table-meetings td:nth-child(2) { min-width: 200px; }
-  .btn-action-group { flex-direction: column; gap: 0.15rem; }
-}
-
-/* ===== Impression ===== */
-@media print {
-  .no-print { display: none !important; }
-  .navbar, footer, .toast-container, .filters-bar, .btn-action-group { display: none !important; }
-  main.meetings-container { width: 100%; max-width: none; padding: 0; margin: 0; }
-  .page-header { margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #1e293b; }
-  .table-meetings { font-size: 0.75rem; box-shadow: none; border: 1px solid #dee2e6; }
-  .table-meetings thead th {
-    background-color: #f8f9fa !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  if (tickets.length === 0) {
+    DOM.tableContainer.classList.add('d-none');
+    DOM.emptyState.classList.remove('d-none');
+    return;
   }
-  .badge-priority, .badge-meeting-status, .badge-national, .groom-link {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    border: 1px solid rgba(0, 0, 0, 0.2);
-  }
-  .stat-card {
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
-    border: 1px solid #dee2e6;
+
+  DOM.emptyState.classList.add('d-none');
+  DOM.tableContainer.classList.remove('d-none');
+  DOM.tableBody.innerHTML = tickets.map(buildRow).join('');
+  initTooltips();
+}
+
+function buildRow(ticket) {
+  const id          = ticket.id;
+  const number      = getField(ticket, 'ticketNumber') || id.substring(0, 6).toUpperCase();
+  const title       = getField(ticket, 'title') || 'Sans titre';
+  const requester   = getField(ticket, 'requester') || 'Utilisateur';
+  const category    = getField(ticket, 'category') || 'Autre';
+  const priority    = getField(ticket, 'priority') || 'Moyenne';
+  const status      = getField(ticket, 'status') || 'Ouvert';
+  const meetStatus  = ticket.meetingStatus || 'pending';
+
+  return `
+    <tr class="fade-in" data-id="${id}">
+      <td><span class="fw-bold text-primary">#${escapeHtml(number)}</span></td>
+      <td>
+        <div class="d-flex flex-column">
+          <span class="fw-semibold">${escapeHtml(title)}</span>
+          <small class="text-muted">${formatDate(getField(ticket, 'createdAt'))}</small>
+        </div>
+      </td>
+      <td>
+        <div class="d-flex align-items-center">
+          <div class="avatar-circle me-2" style="width:28px;height:28px;font-size:.7rem;">
+            ${initials(requester)}
+          </div>
+          <span>${escapeHtml(requester)}</span>
+        </div>
+      </td>
+      <td><span class="badge bg-light text-dark border">${escapeHtml(category)}</span></td>
+      <td>${priorityBadge(priority)}</td>
+      <td><span class="badge bg-primary">${escapeHtml(status)}</span></td>
+      <td>${meetingBadge(meetStatus)}</td>
+      <td>${groomCell(ticket.groomLink)}</td>
+      <td class="no-print">
+        <div class="btn-action-group">
+          <button class="btn btn-outline-primary" data-action="notes" data-id="${id}"
+                  title="Notes de réunion" data-bs-toggle="tooltip">
+            <i class="bi bi-journal-text"></i>
+          </button>
+          <button class="btn btn-outline-success" data-action="treated" data-id="${id}"
+                  title="Marquer comme traité" data-bs-toggle="tooltip">
+            <i class="bi bi-check-circle"></i>
+          </button>
+          <button class="btn btn-outline-danger" data-action="unflag" data-id="${id}"
+                  title="Retirer du scope national" data-bs-toggle="tooltip">
+            <i class="bi bi-flag"></i>
+          </button>
+          <a href="ticket-detail.html?id=${id}" class="btn btn-outline-secondary"
+             title="Voir le ticket" data-bs-toggle="tooltip">
+            <i class="bi bi-eye"></i>
+          </a>
+        </div>
+      </td>
+    </tr>`;
+}
+
+// ------------------------------------------------------------
+// 7. ACTIONS DU TABLEAU (délégation)
+// ------------------------------------------------------------
+function onTableAction(event) {
+  const button = event.target.closest('[data-action]');
+  if (!button) return;
+
+  const { action, id } = button.dataset;
+
+  switch (action) {
+    case 'notes':   openNotesModal(id); break;
+    case 'treated': markAsTreated(id);  break;
+    case 'unflag':  unflagNational(id); break;
   }
 }
+
+async function markAsTreated(id) {
+  if (!confirm('Marquer ce ticket comme traité pour la réunion ?')) return;
+  await updateMeetingFields(id, { meetingStatus: 'treated' }, 'Ticket marqué comme traité.');
+}
+
+async function unflagNational(id) {
+  if (!confirm('Retirer ce ticket du scope national ? Il disparaîtra de cette liste.')) return;
+
+  try {
+    await updateDoc(doc(db, 'tickets', id), {
+      isNational: false,
+      meetingStatus: null,
+      meetingNotes: null,
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+    showToast('Ticket retiré du scope national.', 'success');
+  } catch (error) {
+    console.error('[meetings] Erreur unflag :', error);
+    showToast('Erreur lors du retrait du scope national.', 'danger');
+  }
+}
+
+// ------------------------------------------------------------
+// 8. MODAL — NOTES DE RÉUNION
+// ------------------------------------------------------------
+function openNotesModal(id) {
+  const ticket = allTickets.find((t) => t.id === id);
+  if (!ticket) return;
+
+  currentTicketId = id;
+
+  DOM.modalTitle.textContent = getField(ticket, 'title') || 'Sans titre';
+  DOM.modalInfo.textContent  =
+    `Ticket #${getField(ticket, 'ticketNumber') || id.substring(0, 6)} • ` +
+    `Créé le ${formatDate(getField(ticket, 'createdAt'))}`;
+  DOM.modalNotes.value       = ticket.meetingNotes || '';
+  DOM.modalStatus.value      = ticket.meetingStatus || 'pending';
+
+  getModal().show();
+}
+
+async function saveMeetingNotes() {
+  if (!currentTicketId) return;
+
+  setSaveButtonLoading(true);
+
+  try {
+    await updateDoc(doc(db, 'tickets', currentTicketId), {
+      meetingNotes:  DOM.modalNotes.value.trim(),
+      meetingStatus: DOM.modalStatus.value,
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+
+    showToast('Notes de réunion enregistrées.', 'success');
+    getModal().hide();
+  } catch (error) {
+    console.error('[meetings] Erreur sauvegarde notes :', error);
+    showToast('Erreur lors de l’enregistrement des notes.', 'danger');
+  } finally {
+    setSaveButtonLoading(false);
+    currentTicketId = null;
+  }
+}
+
+function setSaveButtonLoading(loading) {
+  DOM.btnSaveNotes.disabled = loading;
+  DOM.btnSaveNotes.innerHTML = loading
+    ? '<span class="spinner-border spinner-border-sm me-1"></span>Enregistrement…'
+    : '<i class="bi bi-save me-1"></i> Enregistrer';
+}
+
+// ------------------------------------------------------------
+// 9. MISE À JOUR GÉNÉRIQUE FIRESTORE
+// ------------------------------------------------------------
+async function updateMeetingFields(id, fields, successMessage) {
+  try {
+    await updateDoc(doc(db, 'tickets', id), {
+      ...fields,
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+    if (successMessage) showToast(successMessage, 'success');
+  } catch (error) {
+    console.error('[meetings] Erreur mise à jour :', error);
+    showToast('Erreur lors de la mise à jour.', 'danger');
+  }
+}
+
+// ------------------------------------------------------------
+// 10. FILTRES
+// ------------------------------------------------------------
+function onFilterChange() {
+  filters.meetingStatus = DOM.filterStatus.value;
+  filters.priority      = DOM.filterPriority.value;
+  renderTable();
+}
+
+function resetFilters() {
+  filters.meetingStatus = '';
+  filters.priority      = '';
+  DOM.filterStatus.value   = '';
+  DOM.filterPriority.value = '';
+  renderTable();
+}
+
+function applyFilters(tickets) {
+  return tickets.filter((t) => {
+    const meetStatus = t.meetingStatus || 'pending';
+    if (filters.meetingStatus && meetStatus !== filters.meetingStatus) return false;
+    if (filters.priority && getField(t, 'priority') !== filters.priority) return false;
+    return true;
+  });
+}
+
+// ------------------------------------------------------------
+// 11. STATISTIQUES
+// ------------------------------------------------------------
+function refreshStats() {
+  const count = (status) =>
+    allTickets.filter((t) => (t.meetingStatus || 'pending') === status).length;
+
+  animateCounter(DOM.statTotal,     allTickets.length);
+  animateCounter(DOM.statPending,   count('pending'));
+  animateCounter(DOM.statTreated,   count('treated'));
+  animateCounter(DOM.statPostponed, count('postponed'));
+}
+
+function animateCounter(element, target) {
+  if (!element) return;
+  const start    = parseInt(element.textContent, 10) || 0;
+  const duration = 400;
+  const steps    = 20;
+  const increment = (target - start) / steps;
+  let current = start;
+  let step = 0;
+
+  const timer = setInterval(() => {
+    step++;
+    current += increment;
+    if (step >= steps) {
+      element.textContent = target;
+      clearInterval(timer);
+    } else {
+      element.textContent = Math.round(current);
+    }
+  }, duration / steps);
+}
+
+// ------------------------------------------------------------
+// 12. UTILITAIRES
+// ------------------------------------------------------------
+function getField(ticket, key) {
+  const aliases = FIELD_MAP[key] || [key];
+  for (const alias of aliases) {
+    if (ticket[alias] !== undefined && ticket[alias] !== null && ticket[alias] !== '') {
+      return ticket[alias];
+    }
+  }
+  return null;
+}
+
+function toDate(value) {
+  if (!value) return new Date(0);
+  if (value.toDate) return value.toDate();
+  const d = new Date(value);
+  return isNaN(d) ? new Date(0) : d;
+}
+
+function formatDate(value) {
+  if (!value) return 'N/A';
+  return toDate(value).toLocaleDateString('fr-FR', {
+    day: '2-digit', month: 'short', year: 'numeric'
+  });
+}
+
+function initials(name) {
+  if (!name) return 'U';
+  return name.split(' ').map((p) => p.charAt(0)).join('').toUpperCase().substring(0, 2);
+}
+
+function escapeHtml(text) {
+  if (text === null || text === undefined) return '';
+  const div = document.createElement('div');
+  div.textContent = String(text);
+  return div.innerHTML;
+}
+
+function priorityBadge(priority) {
+  const cls = (priority || 'Moyenne').toLowerCase();
+  return `<span class="badge-priority ${escapeHtml(cls)}">${escapeHtml(priority)}</span>`;
+}
+
+function meetingBadge(status) {
+  const info = MEETING_STATUS[status] || MEETING_STATUS.pending;
+  return `
+    <span class="badge-meeting-status ${escapeHtml(status)}">
+      <i class="bi ${info.icon}"></i> ${info.label}
+    </span>`;
+}
+
+function groomCell(link) {
+  if (!link) return '<span class="text-muted">—</span>';
+  return `
+    <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"
+       class="groom-link" title="Ouvrir le ticket groom">
+      <i class="bi bi-link-45deg"></i> Groom
+    </a>`;
+}
+
+function getModal() {
+  return bootstrap.Modal.getOrCreateInstance(DOM.modalElement);
+}
+
+function initTooltips() {
+  if (!window.bootstrap?.Tooltip) return;
+  DOM.tableBody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
+    bootstrap.Tooltip.getOrCreateInstance(el, { delay: { show: 300, hide: 100 } });
+  });
+}
+
+function hideLoading() {
+  DOM.loading?.classList.add('d-none');
+}
+
+function showToast(message, type = 'info') {
+  if (!DOM.toastElement) return;
+  DOM.toastBody.textContent = message;
+  DOM.toastElement.classList.remove('border-primary', 'border-success', 'border-danger', 'border-warning');
+  DOM.toastElement.classList.add(`border-${type}`);
+  bootstrap.Toast.getOrCreateInstance(DOM.toastElement, { delay: 3000 }).show();
+}
+
+// ------------------------------------------------------------
+// 13. NETTOYAGE
+// ------------------------------------------------------------
+window.addEventListener('beforeunload', () => {
+  if (unsubscribe) unsubscribe();
+});

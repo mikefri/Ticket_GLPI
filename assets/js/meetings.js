@@ -1,19 +1,25 @@
 /**
- * ============================================
- * MEETINGS.JS - Logique de la page Préparation des réunions
- * ============================================
- * Ce fichier gère :
- * - La récupération des tickets nationaux depuis Firestore
- * - L'affichage dans le tableau
- * - Le filtrage et les statistiques
- * - Les notes de réunion et la mise à jour du statut
- * - L'export PDF
+ * ============================================================
+ *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
+ * ============================================================
+ *  Dépendances :
+ *    - assets/js/firebase-init.js (exporte db & auth)
+ *    - Bootstrap 5.3.2 + Bootstrap Icons (chargés dans meetings.html)
+ *
+ *  Rôles du fichier :
+ *    1. Écouter en temps réel les tickets où isNational == true
+ *    2. Les afficher dans le tableau de meetings.html
+ *    3. Filtrer par statut de réunion et par priorité
+ *    4. Calculer les compteurs (statistiques rapides)
+ *    5. Gérer les notes de réunion + changement de statut (modal)
+ *    6. Permettre l'impression / export de la liste
+ * ============================================================
  */
 
-// ============================================
-// IMPORTS FIREBASE (Modular SDK v9+)
-// ============================================
-import { db, auth } from './firebase-config.js'; // Assurez-vous que ce fichier existe
+// ------------------------------------------------------------
+// 1. IMPORTS FIREBASE (SDK 10.7.1 — même version que firebase-init.js)
+// ------------------------------------------------------------
+import { db, auth } from './firebase-init.js';
 import {
   collection,
   query,
@@ -21,425 +27,425 @@ import {
   onSnapshot,
   doc,
   updateDoc,
-  arrayUnion,
   serverTimestamp
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import {
-  onAuthStateChanged
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// ============================================
-// VARIABLES GLOBALES
-// ============================================
-let allNationalTickets = [];
-let currentFilters = {
+// ------------------------------------------------------------
+// 2. CONFIGURATION & ÉTAT GLOBAL
+// ------------------------------------------------------------
+
+// Correspondance des champs : adaptez si votre schéma Firestore
+// utilise d'autres noms (le code testera chaque alias dans l'ordre).
+const FIELD_MAP = {
+  title:        ['title', 'titre', 'subject', 'objet'],
+  requester:    ['requesterName', 'requester', 'userName', 'demandeur', 'createdByName'],
+  category:     ['category', 'categorie'],
+  priority:     ['priority', 'priorite'],
+  status:       ['status', 'statut'],
+  ticketNumber: ['ticketNumber', 'number', 'numero'],
+  createdAt:    ['createdAt', 'dateCreation', 'created_at']
+};
+
+// Libellés + icônes des statuts de réunion
+const MEETING_STATUS = {
+  pending:   { label: 'À traiter', icon: 'bi-hourglass-split' },
+  treated:   { label: 'Traité',    icon: 'bi-check-circle-fill' },
+  postponed: { label: 'Reporté',   icon: 'bi-arrow-repeat' }
+};
+
+let allTickets = [];         // Source de vérité : tous les tickets nationaux
+let currentTicketId = null;  // Ticket actuellement ouvert dans la modal
+let unsubscribe = null;      // Fonction de désabonnement onSnapshot
+
+const filters = {
   meetingStatus: '',
   priority: ''
 };
-let currentTicketForModal = null;
 
-// ============================================
-// ÉLÉMENTS DOM
-// ============================================
+// ------------------------------------------------------------
+// 3. RÉFÉRENCES DOM
+// ------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+
 const DOM = {
-  loading: document.getElementById('loading'),
-  tableContainer: document.getElementById('meetings-table-container'),
-  tableBody: document.getElementById('meetings-table-body'),
-  emptyState: document.getElementById('empty'),
-  filterMeetingStatus: document.getElementById('filter-meeting-status'),
-  filterPriority: document.getElementById('filter-priority'),
-  btnResetFilters: document.getElementById('btn-reset-filters'),
-  btnExportPdf: document.getElementById('btn-export-pdf'),
-  // Statistiques
-  statTotal: document.getElementById('stat-total'),
-  statPending: document.getElementById('stat-pending'),
-  statTreated: document.getElementById('stat-treated'),
-  statPostponed: document.getElementById('stat-postponed'),
-  // Modal
-  meetingNotesModal: document.getElementById('meetingNotesModal'),
-  modalTicketTitle: document.getElementById('modal-ticket-title'),
-  modalTicketInfo: document.getElementById('modal-ticket-info'),
-  meetingNotesTextarea: document.getElementById('meeting-notes-textarea'),
-  meetingStatusSelect: document.getElementById('meeting-status-select'),
-  btnSaveMeetingNotes: document.getElementById('btn-save-meeting-notes'),
-  // Toast
-  toastBody: document.getElementById('toast-body'),
-  toastElement: document.getElementById('toast')
+  loading:          $('loading'),
+  tableContainer:   $('meetings-table-container'),
+  tableBody:        $('meetings-table-body'),
+  emptyState:       $('empty'),
+  filterStatus:     $('filter-meeting-status'),
+  filterPriority:   $('filter-priority'),
+  btnResetFilters:  $('btn-reset-filters'),
+  btnExportPdf:     $('btn-export-pdf'),
+  statTotal:        $('stat-total'),
+  statPending:      $('stat-pending'),
+  statTreated:      $('stat-treated'),
+  statPostponed:    $('stat-postponed'),
+  modalElement:     $('meetingNotesModal'),
+  modalTitle:       $('modal-ticket-title'),
+  modalInfo:        $('modal-ticket-info'),
+  modalNotes:       $('meeting-notes-textarea'),
+  modalStatus:      $('meeting-status-select'),
+  btnSaveNotes:     $('btn-save-meeting-notes'),
+  toastElement:     $('toast'),
+  toastBody:        $('toast-body')
 };
 
-// ============================================
-// INITIALISATION
-// ============================================
+// ------------------------------------------------------------
+// 4. INITIALISATION
+// ------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', () => {
-  initializeEventListeners();
-  loadNationalTickets();
+  bindEvents();
+  subscribeNationalTickets();
 });
 
-function initializeEventListeners() {
-  // Filtres
-  DOM.filterMeetingStatus.addEventListener('change', handleFilterChange);
-  DOM.filterPriority.addEventListener('change', handleFilterChange);
+function bindEvents() {
+  DOM.filterStatus.addEventListener('change', onFilterChange);
+  DOM.filterPriority.addEventListener('change', onFilterChange);
   DOM.btnResetFilters.addEventListener('click', resetFilters);
-  
-  // Export PDF
-  DOM.btnExportPdf.addEventListener('click', exportToPdf);
-  
-  // Modal - Sauvegarder les notes
-  DOM.btnSaveMeetingNotes.addEventListener('click', saveMeetingNotes);
+  DOM.btnExportPdf.addEventListener('click', () => window.print());
+  DOM.btnSaveNotes.addEventListener('click', saveMeetingNotes);
+
+  // Délégation d'événements : un seul listener pour tout le tableau
+  DOM.tableBody.addEventListener('click', onTableAction);
 }
 
-// ============================================
-// CHARGEMENT DES TICKETS NATIONAUX
-// ============================================
-function loadNationalTickets() {
-  const ticketsCollection = collection(db, 'tickets');
-  const q = query(ticketsCollection, where('isNational', '==', true));
-  
-  onSnapshot(q, (snapshot) => {
-    allNationalTickets = [];
-    
-    snapshot.forEach((doc) => {
-      allNationalTickets.push({
-        id: doc.id,
-        ...doc.data()
-      });
-    });
-    
-    // Trier par date de création décroissante
-    allNationalTickets.sort((a, b) => {
-      const dateA = a.createdAt?.toDate() || new Date(0);
-      const dateB = b.createdAt?.toDate() || new Date(0);
-      return dateB - dateA;
-    });
-    
-    updateStatistics();
-    renderTickets();
+// ------------------------------------------------------------
+// 5. ÉCOUTE TEMPS RÉEL FIRESTORE
+// ------------------------------------------------------------
+function subscribeNationalTickets() {
+  const q = query(collection(db, 'tickets'), where('isNational', '==', true));
+
+  unsubscribe = onSnapshot(q, (snapshot) => {
+    allTickets = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    // Tri client : plus récent d'abord (évite un index composite Firestore)
+    allTickets.sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt));
+
+    refreshStats();
+    renderTable();
     hideLoading();
   }, (error) => {
-    console.error('Erreur lors du chargement des tickets nationaux:', error);
-    showToast('Erreur lors du chargement des tickets', 'danger');
+    console.error('[meetings] Erreur Firestore :', error);
+    showToast('Erreur lors du chargement des tickets nationaux.', 'danger');
     hideLoading();
   });
 }
 
-// ============================================
-// AFFICHAGE DES TICKETS
-// ============================================
-function renderTickets() {
-  const filteredTickets = applyFilters(allNationalTickets);
-  
-  if (filteredTickets.length === 0) {
+// ------------------------------------------------------------
+// 6. AFFICHAGE
+// ------------------------------------------------------------
+function renderTable() {
+  const tickets = applyFilters(allTickets);
+
+  if (tickets.length === 0) {
     DOM.tableContainer.classList.add('d-none');
     DOM.emptyState.classList.remove('d-none');
     return;
   }
-  
+
   DOM.emptyState.classList.add('d-none');
   DOM.tableContainer.classList.remove('d-none');
-  DOM.tableBody.innerHTML = '';
-  
-  filteredTickets.forEach((ticket, index) => {
-    const row = createTicketRow(ticket, index);
-    DOM.tableBody.appendChild(row);
-  });
+
+  DOM.tableBody.innerHTML = tickets.map(buildRow).join('');
+  initTooltips();
 }
 
-function createTicketRow(ticket, index) {
-  const tr = document.createElement('tr');
-  tr.className = 'fade-in';
-  tr.style.animationDelay = `${index * 0.05}s`;
-  
-  tr.innerHTML = `
-    <td>
-      <span class="fw-bold text-primary">#${ticket.ticketNumber || ticket.id.substring(0, 6)}</span>
-    </td>
-    <td>
-      <div class="d-flex flex-column">
-        <span class="fw-semibold">${escapeHtml(ticket.title || 'Sans titre')}</span>
-        <small class="text-muted">${formatDate(ticket.createdAt)}</small>
-      </div>
-    </td>
-    <td>
-      <div class="d-flex align-items-center">
-        <div class="avatar-circle me-2" style="width: 28px; height: 28px; font-size: 0.7rem;">
-          ${getInitials(ticket.requesterName || 'U')}
+function buildRow(ticket) {
+  const id          = ticket.id;
+  const number      = getField(ticket, 'ticketNumber') || id.substring(0, 6).toUpperCase();
+  const title       = getField(ticket, 'title') || 'Sans titre';
+  const requester   = getField(ticket, 'requester') || 'Utilisateur';
+  const category    = getField(ticket, 'category') || 'Autre';
+  const priority    = getField(ticket, 'priority') || 'Moyenne';
+  const status      = getField(ticket, 'status') || 'Ouvert';
+  const meetStatus  = ticket.meetingStatus || 'pending';
+
+  return `
+    <tr class="fade-in" data-id="${id}">
+      <td><span class="fw-bold text-primary">#${escapeHtml(number)}</span></td>
+      <td>
+        <div class="d-flex flex-column">
+          <span class="fw-semibold">${escapeHtml(title)}</span>
+          <small class="text-muted">${formatDate(getField(ticket, 'createdAt'))}</small>
         </div>
-        <span>${escapeHtml(ticket.requesterName || 'Utilisateur')}</span>
-      </div>
-    </td>
-    <td>
-      <span class="badge bg-light text-dark border">${escapeHtml(ticket.category || 'Autre')}</span>
-    </td>
-    <td>
-      ${renderPriorityBadge(ticket.priority)}
-    </td>
-    <td>
-      <span class="badge bg-primary">${escapeHtml(ticket.status || 'Ouvert')}</span>
-    </td>
-    <td>
-      ${renderMeetingStatusBadge(ticket.meetingStatus || 'pending')}
-    </td>
-    <td class="no-print">
-      <div class="btn-action-group">
-        <button class="btn btn-outline-primary" onclick="openMeetingNotesModal('${ticket.id}')" 
-                title="Ajouter des notes de réunion" data-bs-toggle="tooltip">
-          <i class="bi bi-journal-text"></i>
-        </button>
-        <button class="btn btn-outline-success" onclick="markAsTreated('${ticket.id}')" 
-                title="Marquer comme traité" data-bs-toggle="tooltip">
-          <i class="bi bi-check-circle"></i>
-        </button>
-        <a href="ticket-detail.html?id=${ticket.id}" class="btn btn-outline-secondary" 
-           title="Voir le détail" data-bs-toggle="tooltip">
-          <i class="bi bi-eye"></i>
-        </a>
-      </div>
-    </td>
-  `;
-  
-  return tr;
+      </td>
+      <td>
+        <div class="d-flex align-items-center">
+          <div class="avatar-circle me-2" style="width:28px;height:28px;font-size:.7rem;">
+            ${initials(requester)}
+          </div>
+          <span>${escapeHtml(requester)}</span>
+        </div>
+      </td>
+      <td><span class="badge bg-light text-dark border">${escapeHtml(category)}</span></td>
+      <td>${priorityBadge(priority)}</td>
+      <td><span class="badge bg-primary">${escapeHtml(status)}</span></td>
+      <td>${meetingBadge(meetStatus)}</td>
+      <td class="no-print">
+        <div class="btn-action-group">
+          <button class="btn btn-outline-primary" data-action="notes" data-id="${id}"
+                  title="Notes de réunion" data-bs-toggle="tooltip">
+            <i class="bi bi-journal-text"></i>
+          </button>
+          <button class="btn btn-outline-success" data-action="treated" data-id="${id}"
+                  title="Marquer comme traité" data-bs-toggle="tooltip">
+            <i class="bi bi-check-circle"></i>
+          </button>
+          <button class="btn btn-outline-danger" data-action="unflag" data-id="${id}"
+                  title="Retirer du scope national" data-bs-toggle="tooltip">
+            <i class="bi bi-flag"></i>
+          </button>
+          <a href="ticket-detail.html?id=${id}" class="btn btn-outline-secondary"
+             title="Voir le ticket" data-bs-toggle="tooltip">
+            <i class="bi bi-eye"></i>
+          </a>
+        </div>
+      </td>
+    </tr>`;
 }
 
-// ============================================
-// FILTRAGE
-// ============================================
+// ------------------------------------------------------------
+// 7. ACTIONS DU TABLEAU (délégation)
+// ------------------------------------------------------------
+function onTableAction(event) {
+  const button = event.target.closest('[data-action]');
+  if (!button) return;
+
+  const { action, id } = button.dataset;
+
+  switch (action) {
+    case 'notes':   openNotesModal(id); break;
+    case 'treated': markAsTreated(id);  break;
+    case 'unflag':  unflagNational(id); break;
+  }
+}
+
+async function markAsTreated(id) {
+  if (!confirm('Marquer ce ticket comme traité pour la réunion ?')) return;
+  await updateMeetingFields(id, { meetingStatus: 'treated' }, 'Ticket marqué comme traité.');
+}
+
+async function unflagNational(id) {
+  if (!confirm('Retirer ce ticket du scope national ? Il disparaîtra de cette liste.')) return;
+
+  try {
+    await updateDoc(doc(db, 'tickets', id), {
+      isNational: false,
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+    showToast('Ticket retiré du scope national.', 'success');
+  } catch (error) {
+    console.error('[meetings] Erreur unflag :', error);
+    showToast('Erreur lors du retrait du scope national.', 'danger');
+  }
+}
+
+// ------------------------------------------------------------
+// 8. MODAL — NOTES DE RÉUNION
+// ------------------------------------------------------------
+function openNotesModal(id) {
+  const ticket = allTickets.find((t) => t.id === id);
+  if (!ticket) return;
+
+  currentTicketId = id;
+
+  DOM.modalTitle.textContent = getField(ticket, 'title') || 'Sans titre';
+  DOM.modalInfo.textContent  =
+    `Ticket #${getField(ticket, 'ticketNumber') || id.substring(0, 6)} • ` +
+    `Créé le ${formatDate(getField(ticket, 'createdAt'))}`;
+  DOM.modalNotes.value       = ticket.meetingNotes || '';
+  DOM.modalStatus.value      = ticket.meetingStatus || 'pending';
+
+  getModal().show();
+}
+
+async function saveMeetingNotes() {
+  if (!currentTicketId) return;
+
+  setSaveButtonLoading(true);
+
+  try {
+    await updateDoc(doc(db, 'tickets', currentTicketId), {
+      meetingNotes:  DOM.modalNotes.value.trim(),
+      meetingStatus: DOM.modalStatus.value,
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+
+    showToast('Notes de réunion enregistrées.', 'success');
+    getModal().hide();
+  } catch (error) {
+    console.error('[meetings] Erreur sauvegarde notes :', error);
+    showToast('Erreur lors de l’enregistrement des notes.', 'danger');
+  } finally {
+    setSaveButtonLoading(false);
+    currentTicketId = null;
+  }
+}
+
+function setSaveButtonLoading(loading) {
+  DOM.btnSaveNotes.disabled = loading;
+  DOM.btnSaveNotes.innerHTML = loading
+    ? '<span class="spinner-border spinner-border-sm me-1"></span>Enregistrement…'
+    : '<i class="bi bi-save me-1"></i> Enregistrer';
+}
+
+// ------------------------------------------------------------
+// 9. MISE À JOUR GÉNÉRIQUE FIRESTORE
+// ------------------------------------------------------------
+async function updateMeetingFields(id, fields, successMessage) {
+  try {
+    await updateDoc(doc(db, 'tickets', id), {
+      ...fields,
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+    if (successMessage) showToast(successMessage, 'success');
+  } catch (error) {
+    console.error('[meetings] Erreur mise à jour :', error);
+    showToast('Erreur lors de la mise à jour.', 'danger');
+  }
+}
+
+// ------------------------------------------------------------
+// 10. FILTRES
+// ------------------------------------------------------------
+function onFilterChange() {
+  filters.meetingStatus = DOM.filterStatus.value;
+  filters.priority      = DOM.filterPriority.value;
+  renderTable();
+}
+
+function resetFilters() {
+  filters.meetingStatus = '';
+  filters.priority      = '';
+  DOM.filterStatus.value   = '';
+  DOM.filterPriority.value = '';
+  renderTable();
+}
+
 function applyFilters(tickets) {
-  return tickets.filter(ticket => {
-    // Filtre par statut de réunion
-    if (currentFilters.meetingStatus && ticket.meetingStatus !== currentFilters.meetingStatus) {
-      return false;
-    }
-    
-    // Filtre par priorité
-    if (currentFilters.priority && ticket.priority !== currentFilters.priority) {
-      return false;
-    }
-    
+  return tickets.filter((t) => {
+    const meetStatus = t.meetingStatus || 'pending';
+    if (filters.meetingStatus && meetStatus !== filters.meetingStatus) return false;
+    if (filters.priority && getField(t, 'priority') !== filters.priority) return false;
     return true;
   });
 }
 
-function handleFilterChange() {
-  currentFilters.meetingStatus = DOM.filterMeetingStatus.value;
-  currentFilters.priority = DOM.filterPriority.value;
-  renderTickets();
-}
+// ------------------------------------------------------------
+// 11. STATISTIQUES
+// ------------------------------------------------------------
+function refreshStats() {
+  const count = (status) =>
+    allTickets.filter((t) => (t.meetingStatus || 'pending') === status).length;
 
-function resetFilters() {
-  currentFilters = { meetingStatus: '', priority: '' };
-  DOM.filterMeetingStatus.value = '';
-  DOM.filterPriority.value = '';
-  renderTickets();
-}
-
-// ============================================
-// STATISTIQUES
-// ============================================
-function updateStatistics() {
-  const total = allNationalTickets.length;
-  const pending = allNationalTickets.filter(t => (t.meetingStatus || 'pending') === 'pending').length;
-  const treated = allNationalTickets.filter(t => t.meetingStatus === 'treated').length;
-  const postponed = allNationalTickets.filter(t => t.meetingStatus === 'postponed').length;
-  
-  animateCounter(DOM.statTotal, total);
-  animateCounter(DOM.statPending, pending);
-  animateCounter(DOM.statTreated, treated);
-  animateCounter(DOM.statPostponed, postponed);
+  animateCounter(DOM.statTotal,     allTickets.length);
+  animateCounter(DOM.statPending,   count('pending'));
+  animateCounter(DOM.statTreated,   count('treated'));
+  animateCounter(DOM.statPostponed, count('postponed'));
 }
 
 function animateCounter(element, target) {
-  const duration = 500;
-  const start = parseInt(element.textContent) || 0;
-  const increment = (target - start) / (duration / 16);
+  if (!element) return;
+  const start    = parseInt(element.textContent, 10) || 0;
+  const duration = 400;
+  const steps    = 20;
+  const increment = (target - start) / steps;
   let current = start;
-  
+  let step = 0;
+
   const timer = setInterval(() => {
+    step++;
     current += increment;
-    if ((increment > 0 && current >= target) || (increment < 0 && current <= target)) {
+    if (step >= steps) {
       element.textContent = target;
       clearInterval(timer);
     } else {
-      element.textContent = Math.floor(current);
+      element.textContent = Math.round(current);
     }
-  }, 16);
+  }, duration / steps);
 }
 
-// ============================================
-// MODAL - NOTES DE RÉUNION
-// ============================================
-window.openMeetingNotesModal = function(ticketId) {
-  const ticket = allNationalTickets.find(t => t.id === ticketId);
-  if (!ticket) return;
-  
-  currentTicketForModal = ticket;
-  
-  DOM.modalTicketTitle.textContent = ticket.title || 'Sans titre';
-  DOM.modalTicketInfo.textContent = `Ticket #${ticket.ticketNumber || ticket.id.substring(0, 6)} • ${formatDate(ticket.createdAt)}`;
-  DOM.meetingNotesTextarea.value = ticket.meetingNotes || '';
-  DOM.meetingStatusSelect.value = ticket.meetingStatus || 'pending';
-  
-  const modal = new bootstrap.Modal(DOM.meetingNotesModal);
-  modal.show();
-};
-
-window.markAsTreated = async function(ticketId) {
-  if (!confirm('Marquer ce ticket comme traité pour la réunion ?')) return;
-  
-  try {
-    await updateTicketMeetingStatus(ticketId, 'treated');
-    showToast('Ticket marqué comme traité', 'success');
-  } catch (error) {
-    console.error('Erreur:', error);
-    showToast('Erreur lors de la mise à jour', 'danger');
+// ------------------------------------------------------------
+// 12. UTILITAIRES
+// ------------------------------------------------------------
+function getField(ticket, key) {
+  const aliases = FIELD_MAP[key] || [key];
+  for (const alias of aliases) {
+    if (ticket[alias] !== undefined && ticket[alias] !== null && ticket[alias] !== '') {
+      return ticket[alias];
+    }
   }
-};
-
-async function saveMeetingNotes() {
-  if (!currentTicketForModal) return;
-  
-  const notes = DOM.meetingNotesTextarea.value.trim();
-  const status = DOM.meetingStatusSelect.value;
-  
-  DOM.btnSaveMeetingNotes.disabled = true;
-  DOM.btnSaveMeetingNotes.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enregistrement...';
-  
-  try {
-    const ticketRef = doc(db, 'tickets', currentTicketForModal.id);
-    
-    await updateDoc(ticketRef, {
-      meetingNotes: notes,
-      meetingStatus: status,
-      meetingUpdatedAt: serverTimestamp(),
-      meetingUpdatedBy: auth.currentUser?.uid || null
-    });
-    
-    showToast('Notes de réunion enregistrées', 'success');
-    
-    // Fermer le modal
-    const modal = bootstrap.Modal.getInstance(DOM.meetingNotesModal);
-    if (modal) modal.hide();
-    
-  } catch (error) {
-    console.error('Erreur lors de la sauvegarde:', error);
-    showToast('Erreur lors de la sauvegarde', 'danger');
-  } finally {
-    DOM.btnSaveMeetingNotes.disabled = false;
-    DOM.btnSaveMeetingNotes.innerHTML = '<i class="bi bi-save me-1"></i> Enregistrer';
-  }
+  return null;
 }
 
-// ============================================
-// MISE À JOUR FIRESTORE
-// ============================================
-async function updateTicketMeetingStatus(ticketId, status) {
-  const ticketRef = doc(db, 'tickets', ticketId);
-  
-  await updateDoc(ticketRef, {
-    meetingStatus: status,
-    meetingUpdatedAt: serverTimestamp(),
-    meetingUpdatedBy: auth.currentUser?.uid || null
+function toDate(value) {
+  if (!value) return new Date(0);
+  if (value.toDate) return value.toDate();       // Timestamp Firestore
+  const d = new Date(value);
+  return isNaN(d) ? new Date(0) : d;
+}
+
+function formatDate(value) {
+  if (!value) return 'N/A';
+  return toDate(value).toLocaleDateString('fr-FR', {
+    day: '2-digit', month: 'short', year: 'numeric'
   });
 }
 
-// ============================================
-// EXPORT PDF
-// ============================================
-function exportToPdf() {
-  // Utiliser window.print() qui est déjà configuré avec les styles @media print
-  window.print();
-  
-  // Alternative : utiliser jsPDF pour un export plus personnalisé
-  // Décommentez si vous souhaitez utiliser jsPDF :
-  /*
-  import('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js')
-    .then(module => {
-      const { jsPDF } = module;
-      const doc = new jsPDF();
-      
-      doc.setFontSize(16);
-      doc.text('Préparation de réunion - Tickets Nationaux', 14, 20);
-      doc.setFontSize(10);
-      doc.text(`Généré le ${new Date().toLocaleDateString('fr-FR')}`, 14, 28);
-      
-      // Ajouter le tableau ici...
-      
-      doc.save('reunion-tickets-nationaux.pdf');
-    });
-  */
-}
-
-// ============================================
-// FONCTIONS UTILITAIRES
-// ============================================
-function renderPriorityBadge(priority) {
-  const priorityMap = {
-    'Critique': 'critique',
-    'Haute': 'haute',
-    'Moyenne': 'moyenne',
-    'Basse': 'basse'
-  };
-  
-  const className = priorityMap[priority] || 'basse';
-  return `<span class="badge-priority ${className}">${escapeHtml(priority || 'Basse')}</span>`;
-}
-
-function renderMeetingStatusBadge(status) {
-  const statusMap = {
-    'pending': { label: 'À traiter', icon: 'bi-hourglass-split' },
-    'treated': { label: 'Traité', icon: 'bi-check-circle-fill' },
-    'postponed': { label: 'Reporté', icon: 'bi-arrow-repeat' }
-  };
-  
-  const statusInfo = statusMap[status] || statusMap['pending'];
-  return `<span class="badge-meeting-status ${status}">
-    <i class="bi ${statusInfo.icon}"></i>
-    ${statusInfo.label}
-  </span>`;
-}
-
-function formatDate(timestamp) {
-  if (!timestamp) return 'N/A';
-  
-  try {
-    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString('fr-FR', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric'
-    });
-  } catch {
-    return 'N/A';
-  }
-}
-
-function getInitials(name) {
+function initials(name) {
   if (!name) return 'U';
-  return name
-    .split(' ')
-    .map(part => part.charAt(0))
-    .join('')
-    .toUpperCase()
-    .substring(0, 2);
+  return name.split(' ').map((p) => p.charAt(0)).join('').toUpperCase().substring(0, 2);
 }
 
 function escapeHtml(text) {
-  if (!text) return '';
+  if (text === null || text === undefined) return '';
   const div = document.createElement('div');
-  div.textContent = text;
+  div.textContent = String(text);
   return div.innerHTML;
 }
 
+function priorityBadge(priority) {
+  const cls = (priority || 'Moyenne').toLowerCase();
+  return `<span class="badge-priority ${escapeHtml(cls)}">${escapeHtml(priority)}</span>`;
+}
+
+function meetingBadge(status) {
+  const info = MEETING_STATUS[status] || MEETING_STATUS.pending;
+  return `
+    <span class="badge-meeting-status ${escapeHtml(status)}">
+      <i class="bi ${info.icon}"></i> ${info.label}
+    </span>`;
+}
+
+function getModal() {
+  return bootstrap.Modal.getOrCreateInstance(DOM.modalElement);
+}
+
+function initTooltips() {
+  if (!window.bootstrap?.Tooltip) return;
+  DOM.tableBody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
+    bootstrap.Tooltip.getOrCreateInstance(el, { delay: { show: 300, hide: 100 } });
+  });
+}
+
 function hideLoading() {
-  DOM.loading.classList.add('d-none');
+  DOM.loading?.classList.add('d-none');
 }
 
 function showToast(message, type = 'info') {
+  if (!DOM.toastElement) return;
   DOM.toastBody.textContent = message;
-  
-  const toastEl = DOM.toastElement;
-  toastEl.classList.remove('border-primary', 'border-success', 'border-danger', 'border-warning');
-  toastEl.classList.add(`border-${type}`);
-  
-  const toast = new bootstrap.Toast(toastEl, { delay: 3000 });
-  toast.show();
+  DOM.toastElement.classList.remove('border-primary', 'border-success', 'border-danger', 'border-warning');
+  DOM.toastElement.classList.add(`border-${type}`);
+  bootstrap.Toast.getOrCreateInstance(DOM.toastElement, { delay: 3000 }).show();
 }
+
+// ------------------------------------------------------------
+// 13. NETTOYAGE (si l'utilisateur quitte la page)
+// ------------------------------------------------------------
+window.addEventListener('beforeunload', () => {
+  if (unsubscribe) unsubscribe();
+});

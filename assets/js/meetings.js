@@ -1,786 +1,230 @@
-// assets/js/ticket-detail.js
-// Page de détail d'un ticket avec système de chat (+ édition et suppression des messages)
-// + Toggle "Ticket national" et champ "Lien Groom"
+/* ============================================
+   MEETINGS.CSS - Page Préparation des réunions
+   ============================================ */
 
-import './app.js';
-import { db, auth } from './firebase-init.js';
-import { requireAuth, toast, badgeForStatus, badgeForPriority, formatDate } from './app.js';
-
-import {
-  doc, getDoc, updateDoc, deleteDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp,
-  serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
-let currentTicket = null;
-let currentUser = null;
-let isAdmin = false;
-let unsubscribeComments = null;
-
-// Récupérer l'ID du ticket depuis l'URL
-function getTicketIdFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  return params.get('id');
+/* ===== Mise en page large ===== */
+.meetings-container {
+  width: 96%;
+  max-width: 1900px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
-// Charger le ticket
-async function loadTicket(ticketId) {
-  console.log('[ticket-detail] Chargement du ticket:', ticketId);
+/* ===== Page Header ===== */
+.page-header h1 { color: #1e293b; font-weight: 700; }
 
-  try {
-    const ticketRef = doc(db, 'tickets', ticketId);
-    const ticketSnap = await getDoc(ticketRef);
+/* ===== Statistiques rapides ===== */
+.stat-card {
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+.stat-card h3 { font-weight: 700; font-size: 1.75rem; }
 
-    if (!ticketSnap.exists()) {
-      showError('Ticket introuvable');
-      return;
-    }
-
-    currentTicket = { id: ticketSnap.id, ...ticketSnap.data() };
-    console.log('[ticket-detail] Ticket chargé:', currentTicket);
-
-    displayTicket(currentTicket);
-
-    if (currentUser) {
-      loadComments(ticketId);
-    } else {
-      console.error('[ticket-detail] currentUser non défini !');
-    }
-
-  } catch (error) {
-    console.error('[ticket-detail] Erreur de chargement:', error);
-    showError('Erreur lors du chargement du ticket: ' + error.message);
-  }
+/* ===== Barre de filtres ===== */
+.filters-bar {
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  padding: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-// Afficher le ticket
-function displayTicket(ticket) {
-  document.getElementById('loading').classList.add('d-none');
-  document.getElementById('ticket-content').classList.remove('d-none');
+/* ===== Tableau des réunions ===== */
+.table-meetings {
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  width: 100%;
+}
+.table-meetings thead th {
+  background-color: #f8f9fa;
+  border-bottom: 2px solid #dee2e6;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6c757d;
+  padding: 0.75rem 1rem;
+  white-space: nowrap;
+}
+.table-meetings tbody td {
+  vertical-align: middle;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #f1f3f5;
+}
+.table-meetings tbody tr:hover { background-color: rgba(13, 110, 253, 0.02); }
+.table-meetings tbody tr:last-child td { border-bottom: none; }
 
-  document.getElementById('ticket-title').textContent = ticket.title || 'Sans titre';
-  document.getElementById('ticket-id').textContent = ticket.id;
+/* Colonne Titre : plus de place */
+.table-meetings th:nth-child(2),
+.table-meetings td:nth-child(2) { min-width: 340px; }
 
-  const badgesDiv = document.getElementById('ticket-badges');
-  badgesDiv.innerHTML = `
-    ${badgeForStatus(ticket.status)}
-    ${badgeForPriority(ticket.priority)}
-  `;
+/* Colonnes Demandeur / Statut Réunion : pas de retour à la ligne */
+.table-meetings th:nth-child(3),
+.table-meetings td:nth-child(3),
+.table-meetings th:nth-child(7),
+.table-meetings td:nth-child(7) { white-space: nowrap; }
 
-  document.getElementById('ticket-created').textContent = formatDate(ticket.createdAt);
-  document.getElementById('ticket-updated').textContent = formatDate(ticket.updatedAt || ticket.createdAt);
+/* Colonne Actions : boutons sur une seule ligne */
+.table-meetings td:last-child { white-space: nowrap; }
 
-  document.getElementById('requester-name').textContent = ticket.userName || 'Utilisateur inconnu';
+/* ===== Badges de priorité ===== */
+.badge-priority {
+  padding: 0.35rem 0.65rem;
+  border-radius: 50px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.badge-priority.critique { background-color: #dc3545; color: white; }
+.badge-priority.haute { background-color: #fd7e14; color: white; }
+.badge-priority.moyenne { background-color: #ffc107; color: #1e293b; }
+.badge-priority.basse { background-color: #20c997; color: white; }
 
-  document.getElementById('ticket-category').textContent = ticket.category || 'Non spécifiée';
-  const typeSpan = document.getElementById('ticket-type');
-  if (ticket.type) {
-    typeSpan.textContent = ' • ' + ticket.type;
-  }
+/* ===== Badges de statut réunion ===== */
+.badge-meeting-status {
+  padding: 0.35rem 0.65rem;
+  border-radius: 50px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.badge-meeting-status.pending { background-color: #fff3cd; color: #856404; }
+.badge-meeting-status.treated { background-color: #d1e7dd; color: #0f5132; }
+.badge-meeting-status.postponed { background-color: #f8d7da; color: #842029; }
 
-  const assignedName = ticket.takenBy || ticket.assignedTo || 'Non assigné';
-  document.getElementById('assigned-name').textContent = assignedName;
-
-  const descriptionEl = document.getElementById('ticket-description');
-  descriptionEl.innerHTML = linkify(ticket.description) || 'Aucune description fournie.';
-
-  // Pièces jointes
-  if (ticket.attachments && ticket.attachments.length > 0) {
-    displayAttachments(ticket.attachments);
-  }
-
-  if (isAdmin) {
-    displayAdminActions(ticket);
-  }
+/* ===== Badge National ===== */
+.badge-national {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 0.35rem 0.65rem;
+  border-radius: 50px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
-// ─────────────────────────────────────────────
-// AFFICHAGE DES PIÈCES JOINTES (Base64)
-// ─────────────────────────────────────────────
-function displayAttachments(attachments) {
-  const section = document.getElementById('attachments-section');
-  const list    = document.getElementById('attachments-list');
+/* ===== Lien Groom ===== */
+.groom-link {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  background: rgba(102, 126, 234, .1);
+  color: #667eea;
+  border: 1px solid rgba(102, 126, 234, .35);
+  padding: .3rem .6rem;
+  border-radius: 50px;
+  font-size: .75rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .2s ease, color .2s ease;
+}
+.groom-link:hover { background: #667eea; color: #ffffff; }
 
-  section.classList.remove('d-none');
-  list.innerHTML = '';
+/* ===== Boutons d'action ===== */
+.btn-action-group { display: flex; gap: 0.25rem; flex-wrap: nowrap; }
+.btn-action-group .btn { padding: 0.375rem 0.5rem; font-size: 0.875rem; line-height: 1; }
+.btn-action-group .btn:hover { transform: scale(1.1); transition: transform 0.15s ease; }
 
-  const images = attachments.filter(a =>
-    a.type?.startsWith('image/') || a.data?.startsWith('data:image')
-  );
+/* ===== État vide ===== */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px dashed #dee2e6;
+}
+.empty-state-icon {
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.empty-state-icon i { font-size: 2.5rem; color: white; }
 
-  attachments.forEach((att) => {
-    const isImage = att.type?.startsWith('image/') || att.data?.startsWith('data:image');
-
-    if (isImage) {
-      const img = document.createElement('img');
-      img.src       = att.data;
-      img.alt       = att.name || 'Pièce jointe';
-      img.title     = att.name || 'Cliquer pour agrandir';
-      img.className = 'attach-thumb';
-      img.addEventListener('click', () => {
-        const idx = images.findIndex(a => a.data === att.data);
-        openLightbox(images, idx);
-      });
-      list.appendChild(img);
-
-    } else {
-      const a = document.createElement('a');
-      a.href      = att.data;
-      a.download  = att.name || 'fichier';
-      a.className = 'attach-file-badge';
-      a.innerHTML = `
-        <i class="bi bi-file-earmark-arrow-down" style="font-size:1.2rem;flex-shrink:0"></i>
-        <div style="overflow:hidden;min-width:0">
-          <div class="attach-file-name">${escapeHtml(att.name || 'Fichier')}</div>
-          <div style="font-size:0.7rem;opacity:0.5">Télécharger</div>
-        </div>
-      `;
-      list.appendChild(a);
-    }
-  });
+/* ===== Modal Notes de réunion ===== */
+#meetingNotesModal .modal-content {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+#meetingNotesModal .modal-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 12px 12px 0 0;
+  padding: 1rem 1.5rem;
+}
+#meetingNotesModal .modal-header .btn-close { filter: brightness(0) invert(1); }
+#meetingNotesModal .modal-body { padding: 1.5rem; }
+#meetingNotesModal textarea {
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  resize: vertical;
+  min-height: 150px;
+}
+#meetingNotesModal textarea:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
 }
 
-// ─────────────────────────────────────────────
-// LIGHTBOX
-// ─────────────────────────────────────────────
-function openLightbox(images, startIdx) {
-  document.getElementById('__lightbox')?.remove();
+/* ===== Animation d'apparition ===== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.4s ease forwards; }
 
-  let idx = startIdx;
+/* ===== Scrollbar personnalisée ===== */
+.table-responsive::-webkit-scrollbar { height: 6px; }
+.table-responsive::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 3px; }
+.table-responsive::-webkit-scrollbar-thumb { background: #adb5bd; border-radius: 3px; }
+.table-responsive::-webkit-scrollbar-thumb:hover { background: #6c757d; }
 
-  const overlay = document.createElement('div');
-  overlay.id = '__lightbox';
-
-  function render() {
-    const cur = images[idx];
-    overlay.innerHTML = `
-      <div class="lb-topbar">
-        <span class="lb-name">
-          <i class="bi bi-paperclip me-1"></i>${escapeHtml(cur.name || 'Image')}
-          ${images.length > 1 ? `<span class="lb-counter">${idx + 1} / ${images.length}</span>` : ''}
-        </span>
-        <div class="lb-controls">
-          <a href="${cur.data}" download="${escapeHtml(cur.name || 'image')}" class="lb-btn" title="Télécharger">
-            <i class="bi bi-download"></i>
-          </a>
-          <button class="lb-btn" id="lb-close" title="Fermer" style="font-size:1.5rem;line-height:1">&times;</button>
-        </div>
-      </div>
-
-      <img class="lb-img" src="${cur.data}" alt="${escapeHtml(cur.name || '')}">
-
-      ${images.length > 1 ? `
-        <button class="lb-nav lb-prev" ${idx === 0 ? 'disabled' : ''} title="Précédent">
-          <i class="bi bi-chevron-left"></i>
-        </button>
-        <button class="lb-nav lb-next" ${idx === images.length - 1 ? 'disabled' : ''} title="Suivant">
-          <i class="bi bi-chevron-right"></i>
-        </button>
-      ` : ''}
-    `;
-
-    overlay.querySelector('#lb-close')?.addEventListener('click', close);
-    overlay.querySelector('.lb-prev')?.addEventListener('click', () => { if (idx > 0) { idx--; render(); } });
-    overlay.querySelector('.lb-next')?.addEventListener('click', () => { if (idx < images.length - 1) { idx++; render(); } });
-  }
-
-  function close() {
-    overlay.remove();
-    document.removeEventListener('keydown', onKey);
-  }
-
-  function onKey(e) {
-    if (e.key === 'Escape')                                 close();
-    if (e.key === 'ArrowLeft'  && idx > 0)                 { idx--; render(); }
-    if (e.key === 'ArrowRight' && idx < images.length - 1) { idx++; render(); }
-  }
-
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-  document.addEventListener('keydown', onKey);
-
-  render();
-  document.body.appendChild(overlay);
+/* ===== Responsive ===== */
+@media (max-width: 768px) {
+  .page-header h1 { font-size: 1.25rem; }
+  .stat-card h3 { font-size: 1.25rem; }
+  .table-meetings { font-size: 0.85rem; }
+  .table-meetings thead th { font-size: 0.7rem; padding: 0.5rem; }
+  .table-meetings tbody td { padding: 0.5rem; }
+  .table-meetings th:nth-child(2),
+  .table-meetings td:nth-child(2) { min-width: 200px; }
+  .btn-action-group { flex-direction: column; gap: 0.15rem; }
 }
 
-// ============================================================
-//  TOGGLE "TICKET NATIONAL" + CHAMP "LIEN GROOM"
-// ============================================================
-function initNationalToggle(ticketId, isAdmin) {
-  const section   = document.getElementById('national-section');
-  const toggle    = document.getElementById('toggle-national');
-  const wrapper   = document.querySelector('.national-toggle-wrapper');
-  const icon      = document.getElementById('national-icon');
-  const label     = document.getElementById('national-label');
-  const hint      = document.getElementById('national-hint');
-  const flagInfo  = document.getElementById('national-flag-info');
-  const groomInput   = document.getElementById('groom-link');
-  const btnSaveGroom = document.getElementById('btn-save-groom');
-  const btnOpenGroom = document.getElementById('btn-open-groom');
-
-  if (!section || !toggle || !wrapper) return;
-
-  section.classList.remove('d-none');
-  toggle.disabled = !isAdmin;
-  if (groomInput)   groomInput.disabled   = !isAdmin;
-  if (btnSaveGroom) btnSaveGroom.disabled = !isAdmin;
-
-  const ticketRef = doc(db, 'tickets', ticketId);
-
-  // Écoute temps réel pour synchroniser l'UI
-  onSnapshot(ticketRef, (snap) => {
-    if (!snap.exists()) return;
-    const data = snap.data();
-    const isNational = data.isNational === true;
-
-    toggle.checked = isNational;
-
-    // Apparence
-    wrapper.classList.toggle('is-national', isNational);
-    icon.innerHTML = isNational
-      ? '<i class="bi bi-globe-americas"></i>'
-      : '<i class="bi bi-globe2"></i>';
-    label.textContent = isNational ? 'Ticket national' : 'Ticket local';
-    hint.textContent = isNational
-      ? 'Ce ticket est visible dans la page de préparation des réunions.'
-      : 'Activer pour signaler ce ticket au niveau national (réunion).';
-
-    if (isNational && data.nationalFlaggedAt) {
-      const d = data.nationalFlaggedAt.toDate ? data.nationalFlaggedAt.toDate() : new Date(data.nationalFlaggedAt);
-      const formatted = d.toLocaleDateString('fr-FR', {
-        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-      });
-      flagInfo.innerHTML = `<i class="bi bi-info-circle"></i> Signalé national le ${formatted}`;
-      flagInfo.classList.remove('d-none');
-    } else {
-      flagInfo.classList.add('d-none');
-    }
-
-    // ── Champ Groom : synchronisation ──
-    if (groomInput && document.activeElement !== groomInput) {
-      groomInput.value = data.groomLink || '';
-    }
-    if (btnOpenGroom) {
-      if (data.groomLink) {
-        btnOpenGroom.href = data.groomLink;
-        btnOpenGroom.classList.remove('d-none');
-      } else {
-        btnOpenGroom.classList.add('d-none');
-      }
-    }
-  });
-
-  // Gestion du changement du toggle
-  toggle.addEventListener('change', async () => {
-    const newValue = toggle.checked;
-    toggle.disabled = true;
-
-    try {
-      const updateData = {
-        isNational: newValue,
-        nationalFlaggedAt: serverTimestamp(),
-        nationalFlaggedBy: auth.currentUser?.uid || null,
-        updatedAt: Timestamp.now()
-      };
-
-      if (!newValue) {
-        updateData.meetingStatus = null;
-        updateData.meetingNotes  = null;
-      } else {
-        updateData.meetingStatus = 'pending';
-      }
-
-      await updateDoc(ticketRef, updateData);
-
-      toast(
-        newValue
-          ? 'Ticket signalé au niveau national — il apparaît désormais dans la préparation des réunions.'
-          : 'Ticket retiré du scope national.'
-      );
-    } catch (error) {
-      console.error('[national-toggle] Erreur :', error);
-      toggle.checked = !newValue;
-      toast('Erreur lors de la mise à jour : ' + error.message);
-    } finally {
-      if (isAdmin) toggle.disabled = false;
-    }
-  });
-
-  // ── Sauvegarde du lien Groom ──
-  async function saveGroomLink() {
-    if (!groomInput) return;
-
-    let value = groomInput.value.trim();
-    // Ajoute https:// si manquant
-    if (value && !/^https?:\/\//i.test(value)) {
-      value = 'https://' + value;
-      groomInput.value = value;
-    }
-
-    btnSaveGroom.disabled = true;
-    try {
-      await updateDoc(ticketRef, {
-        groomLink: value || null,
-        updatedAt: Timestamp.now()
-      });
-      toast(value
-        ? 'Lien groom enregistré — visible dans la page Réunions.'
-        : 'Lien groom supprimé.');
-    } catch (error) {
-      console.error('[groom] Erreur :', error);
-      toast('Erreur lors de l’enregistrement du lien : ' + error.message);
-    } finally {
-      btnSaveGroom.disabled = !isAdmin;
-    }
+/* ===== Impression ===== */
+@media print {
+  .no-print { display: none !important; }
+  .navbar, footer, .toast-container, .filters-bar, .btn-action-group { display: none !important; }
+  main.meetings-container { width: 100%; max-width: none; padding: 0; margin: 0; }
+  .page-header { margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #1e293b; }
+  .table-meetings { font-size: 0.75rem; box-shadow: none; border: 1px solid #dee2e6; }
+  .table-meetings thead th {
+    background-color: #f8f9fa !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
-
-  btnSaveGroom?.addEventListener('click', saveGroomLink);
-  groomInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      saveGroomLink();
-    }
-  });
-}
-// ============================================================
-//  /TOGGLE "TICKET NATIONAL"
-// ============================================================
-
-// Afficher les actions admin
-function displayAdminActions(ticket) {
-  const actionsSection = document.getElementById('admin-actions');
-  actionsSection.classList.remove('d-none');
-
-  const btnTake     = document.getElementById('btn-take-ticket');
-  const btnResolve  = document.getElementById('btn-resolve-ticket');
-  const btnProgress = document.getElementById('btn-progress-ticket');
-  const btnClose    = document.getElementById('btn-close-ticket');
-
-  if (ticket.status === 'Résolu' || ticket.status === 'Fermé') {
-    btnTake.disabled = true;
-    btnResolve.disabled = true;
-    btnProgress.disabled = true;
+  .badge-priority, .badge-meeting-status, .badge-national, .groom-link {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border: 1px solid rgba(0, 0, 0, 0.2);
   }
-
-  if (ticket.status === 'Fermé') {
-    btnClose.disabled = true;
-  }
-
-  btnTake.onclick     = () => takeTicket();
-  btnResolve.onclick  = () => updateTicketStatus('Résolu');
-  btnProgress.onclick = () => updateTicketStatus('En attente');
-  btnClose.onclick    = () => closeTicket();
-}
-
-// Prendre en charge un ticket
-async function takeTicket() {
-  if (!currentTicket || !currentUser) return;
-
-  try {
-    const ticketRef = doc(db, 'tickets', currentTicket.id);
-    const userName = currentUser.displayName || currentUser.email;
-
-    await updateDoc(ticketRef, {
-      status: 'En cours',
-      takenBy: userName,
-      takenByUid: currentUser.uid,
-      updatedAt: Timestamp.now()
-    });
-
-    toast('Ticket pris en charge avec succès');
-    await loadTicket(currentTicket.id);
-
-  } catch (error) {
-    console.error('[ticket-detail] Erreur prise en charge:', error);
-    toast('Erreur lors de la prise en charge: ' + error.message);
+  .stat-card {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border: 1px solid #dee2e6;
   }
 }
-
-// Mettre à jour le statut
-async function updateTicketStatus(newStatus) {
-  if (!currentTicket) return;
-
-  try {
-    const ticketRef = doc(db, 'tickets', currentTicket.id);
-
-    await updateDoc(ticketRef, {
-      status: newStatus,
-      updatedAt: Timestamp.now()
-    });
-
-    toast(`Statut mis à jour : ${newStatus}`);
-    await loadTicket(currentTicket.id);
-
-  } catch (error) {
-    console.error('[ticket-detail] Erreur mise à jour statut:', error);
-    toast('Erreur lors de la mise à jour: ' + error.message);
-  }
-}
-
-// Fermer le ticket
-async function closeTicket() {
-  if (!currentTicket) return;
-
-  if (!confirm('Êtes-vous sûr de vouloir fermer ce ticket ?')) return;
-
-  try {
-    const ticketRef = doc(db, 'tickets', currentTicket.id);
-
-    await updateDoc(ticketRef, {
-      status: 'Fermé',
-      closedAt: Timestamp.now(),
-      updatedAt: Timestamp.now()
-    });
-
-    toast('Ticket fermé avec succès');
-    await loadTicket(currentTicket.id);
-
-  } catch (error) {
-    console.error('[ticket-detail] Erreur fermeture:', error);
-    toast('Erreur lors de la fermeture: ' + error.message);
-  }
-}
-
-// ===== SYSTÈME DE CHAT =====
-
-function loadComments(ticketId) {
-  console.log('[chat] Chargement des commentaires pour ticket:', ticketId);
-
-  const chatContainer = document.getElementById('chat-messages');
-  if (!chatContainer) {
-    console.error('[chat] Element #chat-messages non trouvé !');
-    return;
-  }
-
-  if (unsubscribeComments) {
-    unsubscribeComments();
-  }
-
-  chatContainer.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Chargement des messages...</div>';
-
-  try {
-    const commentsRef = collection(db, 'tickets', ticketId, 'comments');
-    const q = query(commentsRef, orderBy('createdAt', 'asc'));
-
-    unsubscribeComments = onSnapshot(q, (snapshot) => {
-      console.log('[chat] Snapshot reçu, nb docs:', snapshot.size);
-
-      chatContainer.innerHTML = '';
-
-      if (snapshot.empty) {
-        chatContainer.innerHTML = `
-          <div class="text-center text-muted py-4">
-            <i class="bi bi-chat-dots fs-1 d-block mb-2"></i>
-            Aucun message pour le moment.<br>
-            <small>Soyez le premier à écrire !</small>
-          </div>
-        `;
-        return;
-      }
-
-      snapshot.forEach((docSnap) => {
-        const comment = docSnap.data();
-        const commentId = docSnap.id;
-        console.log('[chat] Message:', comment);
-
-        const isCurrentUser = currentUser && comment.createdBy === currentUser.uid;
-        const canAct = isCurrentUser || isAdmin;
-
-        const editedLabel = comment.editedAt
-          ? `<span class="chat-edited-label"><i class="bi bi-pencil"></i> modifié</span>`
-          : '';
-
-        const bubble = document.createElement('div');
-        bubble.className = `chat-message ${isCurrentUser ? 'user-message' : 'admin-message'}`;
-
-        bubble.innerHTML = `
-          <div class="chat-bubble">
-            ${canAct ? `
-              <div class="chat-actions">
-                <button class="btn-chat-action btn-chat-edit" title="Modifier">
-                  <i class="bi bi-pencil-fill"></i>
-                </button>
-                <button class="btn-chat-action btn-chat-delete" title="Supprimer">
-                  <i class="bi bi-trash-fill"></i>
-                </button>
-              </div>
-            ` : ''}
-            <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
-            <div class="chat-text" id="chat-text-${commentId}">${linkify(comment.text || '')}</div>
-            <div class="chat-edit-area d-none" id="chat-edit-${commentId}">
-              <textarea class="form-control form-control-sm mb-2" rows="2">${escapeHtml(comment.text || '')}</textarea>
-              <div class="d-flex gap-2">
-                <button class="btn btn-sm btn-success btn-save-edit">
-                  <i class="bi bi-check-lg me-1"></i>Sauvegarder
-                </button>
-                <button class="btn btn-sm btn-secondary btn-cancel-edit">
-                  <i class="bi bi-x-lg me-1"></i>Annuler
-                </button>
-              </div>
-            </div>
-            <div class="chat-time">${formatCommentDate(comment.createdAt)}${editedLabel}</div>
-          </div>
-        `;
-
-        // ── Bouton MODIFIER ──
-        bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
-          const bubbleEl = bubble.querySelector('.chat-bubble');
-          const messageEl = bubble;
-          const textEl   = document.getElementById(`chat-text-${commentId}`);
-          const editArea = document.getElementById(`chat-edit-${commentId}`);
-          const ta       = editArea?.querySelector('textarea');
-
-          const msgWidth = messageEl.offsetWidth;
-          const bubbleWidth = bubbleEl.offsetWidth;
-          const bubbleHeight = bubbleEl.offsetHeight;
-
-          messageEl.style.width = msgWidth + 'px';
-          bubbleEl.style.width = bubbleWidth + 'px';
-          bubbleEl.style.minHeight = bubbleHeight + 'px';
-
-          textEl.classList.add('d-none');
-          editArea.classList.remove('d-none');
-
-          if (ta) {
-            ta.style.width = '100%';
-            ta.style.boxSizing = 'border-box';
-            ta.style.height = 'auto';
-            ta.style.height = Math.max(ta.scrollHeight, bubbleHeight - 80) + 'px';
-            ta.focus();
-            ta.selectionStart = ta.selectionEnd = ta.value.length;
-          }
-        });
-
-        // ── Bouton ANNULER ──
-        bubble.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {
-          const bubbleEl = bubble.querySelector('.chat-bubble');
-          const messageEl = bubble;
-
-          document.getElementById(`chat-text-${commentId}`)?.classList.remove('d-none');
-          document.getElementById(`chat-edit-${commentId}`)?.classList.add('d-none');
-
-          messageEl.style.width = '';
-          bubbleEl.style.width = '';
-          bubbleEl.style.minHeight = '';
-        });
-
-        // ── Bouton SAUVEGARDER ──
-        bubble.querySelector('.btn-save-edit')?.addEventListener('click', async () => {
-          const textarea = bubble.querySelector('.chat-edit-area textarea');
-          const newText = textarea?.value?.trim();
-          if (!newText) { toast('Le message ne peut pas être vide'); return; }
-
-          const saveBtn = bubble.querySelector('.btn-save-edit');
-          saveBtn.disabled = true;
-          saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-
-          try {
-            await updateDoc(doc(db, 'tickets', currentTicket.id, 'comments', commentId), {
-              text: newText,
-              editedAt: Timestamp.now()
-            });
-            await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
-
-            const bubbleEl = bubble.querySelector('.chat-bubble');
-            bubble.style.width = '';
-            bubbleEl.style.width = '';
-            bubbleEl.style.minHeight = '';
-
-            toast('Message modifié');
-          } catch (error) {
-            console.error('[chat] Erreur modification:', error);
-            toast('Erreur: ' + error.message);
-            saveBtn.disabled = false;
-            saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Sauvegarder';
-          }
-        });
-
-        // ── Raccourcis clavier dans le textarea d'édition ──
-        bubble.querySelector('.chat-edit-area textarea')?.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            bubble.querySelector('.btn-save-edit')?.click();
-          }
-          if (e.key === 'Escape') {
-            bubble.querySelector('.btn-cancel-edit')?.click();
-          }
-        });
-
-        // ── Bouton SUPPRIMER ──
-        bubble.querySelector('.btn-chat-delete')?.addEventListener('click', async () => {
-          if (!confirm('Supprimer ce message définitivement ?')) return;
-          try {
-            await deleteDoc(doc(db, 'tickets', currentTicket.id, 'comments', commentId));
-            await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
-            toast('Message supprimé');
-          } catch (error) {
-            console.error('[chat] Erreur suppression:', error);
-            toast('Erreur: ' + error.message);
-          }
-        });
-
-        chatContainer.appendChild(bubble);
-      });
-
-      chatContainer.scrollTop = chatContainer.scrollHeight;
-
-    }, (error) => {
-      console.error('[chat] Erreur onSnapshot:', error);
-      chatContainer.innerHTML = `
-        <div class="alert alert-danger m-3">
-          <i class="bi bi-exclamation-triangle"></i>
-          Erreur de chargement des messages: ${error.message}
-        </div>
-      `;
-    });
-
-  } catch (error) {
-    console.error('[chat] Erreur création query:', error);
-    chatContainer.innerHTML = `
-      <div class="alert alert-danger m-3">
-        Erreur: ${error.message}
-      </div>
-    `;
-  }
-}
-
-// ===== UTILITAIRES =====
-
-function formatCommentDate(timestamp) {
-  if (!timestamp) return '';
-  try {
-    let date;
-    if (timestamp.toDate) {
-      date = timestamp.toDate();
-    } else if (timestamp.seconds) {
-      date = new Date(timestamp.seconds * 1000);
-    } else {
-      date = new Date(timestamp);
-    }
-    return date.toLocaleString('fr-FR', {
-      day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
-  } catch (e) {
-    console.error('[chat] Erreur formatage date:', e);
-    return '';
-  }
-}
-
-function escapeHtml(text) {
-  if (!text) return '';
-  const map = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' };
-  return String(text).replace(/[&<>"']/g, m => map[m]);
-}
-
-function linkify(text) {
-  if (!text) return '';
-  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
-  return escapeHtml(text).replace(urlRegex, url =>
-    `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
-  );
-}
-
-function resetTextareaHeight() {
-  const textarea = document.getElementById('new-comment');
-  if (textarea) {
-    textarea.style.height = 'auto';
-    textarea.style.height = '90px';
-  }
-}
-
-async function addComment(text) {
-  console.log('[chat] Tentative ajout message:', text);
-
-  if (!currentTicket) { toast('Erreur: ticket non chargé'); return; }
-  if (!currentUser)   { toast('Erreur: vous devez être connecté'); return; }
-  if (!text || text.trim() === '') { toast('Le message ne peut pas être vide'); return; }
-
-  const btnSend = document.getElementById('btn-add-comment');
-  const textarea = document.getElementById('new-comment');
-
-  try {
-    if (btnSend) {
-      btnSend.disabled = true;
-      btnSend.innerHTML = '<i class="bi bi-hourglass-split"></i>';
-    }
-
-    await addDoc(collection(db, 'tickets', currentTicket.id, 'comments'), {
-      text: text.trim(),
-      createdBy: currentUser.uid,
-      userName: currentUser.displayName || currentUser.email || 'Utilisateur',
-      createdAt: Timestamp.now()
-    });
-
-    console.log('[chat] Message ajouté avec succès');
-    if (textarea) { textarea.value = ''; resetTextareaHeight(); }
-    await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
-
-  } catch (error) {
-    console.error('[chat] Erreur ajout message:', error);
-    toast('Erreur lors de l\'envoi: ' + error.message);
-  } finally {
-    if (btnSend) {
-      btnSend.disabled = false;
-      btnSend.innerHTML = '<i class="bi bi-send-fill"></i>';
-    }
-  }
-}
-
-function showError(message) {
-  document.getElementById('loading').classList.add('d-none');
-  document.getElementById('error').classList.remove('d-none');
-  document.getElementById('error-message').textContent = message;
-}
-
-// ===== EVENT LISTENERS =====
-
-document.getElementById('btn-add-comment')?.addEventListener('click', () => {
-  const textarea = document.getElementById('new-comment');
-  if (textarea) addComment(textarea.value);
-});
-
-document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    addComment(e.target.value);
-  }
-});
-
-document.getElementById('new-comment')?.addEventListener('input', function () {
-  this.style.height = 'auto';
-  const newHeight = Math.min(this.scrollHeight, 200);
-  this.style.height = Math.max(newHeight, 90) + 'px';
-});
-
-// ===== INITIALISATION =====
-(async () => {
-  console.log('[ticket-detail] ===== INITIALISATION =====');
-
-  const ticketId = getTicketIdFromUrl();
-  console.log('[ticket-detail] Ticket ID depuis URL:', ticketId);
-
-  if (!ticketId) {
-    showError('Aucun ID de ticket fourni dans l\'URL');
-    return;
-  }
-
-  const user = await requireAuth(true);
-  console.log('[ticket-detail] Utilisateur après requireAuth:', user);
-
-  if (!user) {
-    showError('Vous devez être connecté pour voir ce ticket');
-    return;
-  }
-
-  currentUser = user;
-  isAdmin = window.__isAdmin === true;
-
-  console.log('[ticket-detail] currentUser défini:', currentUser.email);
-  console.log('[ticket-detail] isAdmin:', isAdmin);
-
-  await loadTicket(ticketId);
-
-  // Initialiser le toggle "Ticket national" + champ "Groom"
-  initNationalToggle(ticketId, isAdmin);
-
-  console.log('[ticket-detail] ===== INITIALISATION TERMINÉE =====');
-})();

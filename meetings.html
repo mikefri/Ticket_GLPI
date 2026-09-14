@@ -3,16 +3,194 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Préparation des réunions – Centre d'assistance</title>
+  <title>Détail du ticket – Centre d'assistance</title>
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/styles.css">
-  <link rel="stylesheet" href="assets/css/meetings.css">
+
+  <style>
+    /* ── Pièces jointes ── */
+    .attachments-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .attach-thumb {
+      height: 88px;
+      width: 88px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.12);
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .attach-thumb:hover {
+      transform: scale(1.06);
+      box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+    }
+    .attach-file-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.82rem;
+      color: inherit;
+      text-decoration: none;
+      max-width: 210px;
+      transition: background 0.2s;
+    }
+    .attach-file-badge:hover { background: rgba(255,255,255,0.1); color: inherit; }
+    .attach-file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+
+    /* ── Lightbox ── */
+    #__lightbox {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: rgba(0,0,0,0.92);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      animation: lbIn 0.18s ease;
+    }
+    @keyframes lbIn { from { opacity: 0; } to { opacity: 1; } }
+    .lb-topbar {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.6), transparent);
+    }
+    .lb-name    { color: #fff; font-size: 0.85rem; opacity: 0.75; }
+    .lb-counter { color: rgba(255,255,255,0.4); font-size: 0.78rem; margin-left: 10px; }
+    .lb-controls { display: flex; gap: 10px; align-items: center; }
+    .lb-btn {
+      background: none; border: none;
+      color: #fff; opacity: 0.7;
+      font-size: 1.25rem; cursor: pointer;
+      text-decoration: none;
+      display: flex; align-items: center;
+      transition: opacity 0.15s;
+    }
+    .lb-btn:hover { opacity: 1; color: #fff; }
+    .lb-img {
+      max-width: 90vw; max-height: 80vh;
+      object-fit: contain;
+      border-radius: 8px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8);
+    }
+    .lb-nav {
+      position: absolute; top: 50%; transform: translateY(-50%);
+      background: rgba(255,255,255,0.1); border: none; color: #fff;
+      width: 44px; height: 44px; border-radius: 50%;
+      font-size: 1.1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+    }
+    .lb-nav:hover    { background: rgba(255,255,255,0.2); }
+    .lb-nav:disabled { opacity: 0.2; cursor: default; }
+    .lb-prev { left: 1rem; }
+    .lb-next { right: 1rem; }
+
+    /* ── Toggle Ticket National ── */
+    .national-toggle-wrapper {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-top: 8px;
+      transition: border-color 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .national-toggle-wrapper.is-national {
+      border-color: rgba(118, 75, 162, 0.5);
+      background: linear-gradient(135deg,
+        rgba(102, 126, 234, 0.06) 0%,
+        rgba(118, 75, 162, 0.08) 100%);
+      box-shadow: 0 2px 12px rgba(118, 75, 162, 0.12);
+    }
+
+    .national-icon-circle {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.15rem;
+      flex-shrink: 0;
+      transition: background 0.3s ease, color 0.3s ease, transform 0.3s ease;
+    }
+
+    .national-toggle-wrapper.is-national .national-icon-circle {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #ffffff;
+      transform: scale(1.08);
+    }
+
+    .national-switch .form-check-input {
+      width: 3em;
+      height: 1.5em;
+      cursor: pointer;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
+    }
+
+    .national-switch .form-check-input:checked {
+      background-color: #764ba2;
+      border-color: #764ba2;
+    }
+
+    .national-switch .form-check-input:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .national-switch .form-check-input:focus {
+      box-shadow: 0 0 0 0.2rem rgba(118, 75, 162, 0.35);
+    }
+
+    .national-flag-info {
+      font-size: 0.78rem;
+      color: rgba(255, 255, 255, 0.45);
+      padding-top: 0.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .national-flag-info i {
+      margin-right: 4px;
+    }
+
+    /* ── Champ Groom ── */
+    .national-groom-row {
+      border-top: 1px solid rgba(0, 0, 0, 0.08);
+    }
+    .national-groom-row .form-control:disabled {
+      opacity: 0.5;
+    }
+    .national-groom-row .input-group .btn {
+      display: inline-flex;
+      align-items: center;
+    }
+  </style>
 </head>
 <body>
 
-<!-- Navigation -->
 <nav class="navbar navbar-expand-lg sncftop">
   <div class="container-fluid">
     <a class="navbar-brand d-flex align-items-center" href="index.html">
@@ -27,7 +205,7 @@
       <ul class="navbar-nav mx-auto mb-2 mb-lg-0">
         <li class="nav-item"><a class="nav-link" href="index.html">Demander une assistance</a></li>
         <li class="nav-item"><a class="nav-link" href="tickets.html">Mes demandes d'assistance</a></li>
-        <li class="nav-item"><a class="nav-link active" href="meetings.html">Réunions</a></li>
+        <li class="nav-item"><a class="nav-link" href="meetings.html">Réunions</a></li>
         <li class="nav-item"><a class="nav-link" href="profil.html">Mon profil</a></li>
         <li class="nav-item d-none" id="nav-admin"><a class="nav-link" href="admin.html">Administration</a></li>
         <li class="nav-item d-none" id="nav-users"><a class="nav-link" href="users.html">Utilisateurs & Rôles</a></li>
@@ -49,126 +227,13 @@
   </div>
 </nav>
 
-<!-- Contenu principal -->
-<main class="container-fluid meetings-container my-4">
+<main class="container my-4">
 
-  <!-- En-tête avec titre et actions -->
-  <div class="page-header mb-4">
-    <div class="row align-items-center g-3">
-      <div class="col">
-        <h1 class="h3 mb-0">
-          <i class="bi bi-calendar-check me-2"></i>
-          Préparation des réunions
-        </h1>
-        <p class="text-muted mb-0 mt-1">
-          <small>Tickets nationaux à aborder lors des prochaines réunions</small>
-        </p>
-      </div>
-      <div class="col-auto no-print">
-        <button class="btn btn-outline-secondary me-2" onclick="window.print()">
-          <i class="bi bi-printer me-1"></i> Imprimer
-        </button>
-        <button class="btn btn-primary" id="btn-export-pdf" onclick="window.print()">
-          <i class="bi bi-file-earmark-pdf me-1"></i> Exporter PDF
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Barre de filtrage -->
-  <div class="filters-bar mb-4 no-print">
-    <div class="row g-2">
-      <div class="col-12 col-sm-6 col-lg-3">
-        <label for="filter-meeting-status" class="form-label small text-muted">Statut réunion</label>
-        <select class="form-select form-select-sm" id="filter-meeting-status" aria-label="Filtrer par statut réunion">
-          <option value="">Tous les statuts</option>
-          <option value="pending">À traiter</option>
-          <option value="treated">Traité</option>
-          <option value="postponed">Reporté</option>
-        </select>
-      </div>
-
-      <div class="col-12 col-sm-6 col-lg-3">
-        <label for="filter-priority" class="form-label small text-muted">Priorité</label>
-        <select class="form-select form-select-sm" id="filter-priority" aria-label="Filtrer par priorité">
-          <option value="">Toutes les priorités</option>
-          <option value="Critique">Critique</option>
-          <option value="Haute">Haute</option>
-          <option value="Moyenne">Moyenne</option>
-          <option value="Basse">Basse</option>
-        </select>
-      </div>
-
-      <div class="col-12 col-lg-6 d-flex align-items-end">
-        <button class="btn btn-sm btn-outline-secondary" id="btn-reset-filters">
-          <i class="bi bi-x-circle me-1"></i> Réinitialiser les filtres
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Statistiques rapides -->
-  <div class="row g-3 mb-4">
-    <div class="col-md-3 col-sm-6">
-      <div class="card stat-card bg-primary bg-opacity-10 border-0">
-        <div class="card-body">
-          <div class="d-flex align-items-center">
-            <div class="flex-shrink-0">
-              <i class="bi bi-flag-fill text-primary fs-3"></i>
-            </div>
-            <div class="flex-grow-1 ms-3">
-              <h6 class="mb-0 text-muted">Total</h6>
-              <h3 class="mb-0" id="stat-total">0</h3>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-      <div class="card stat-card bg-warning bg-opacity-10 border-0">
-        <div class="card-body">
-          <div class="d-flex align-items-center">
-            <div class="flex-shrink-0">
-              <i class="bi bi-hourglass-split text-warning fs-3"></i>
-            </div>
-            <div class="flex-grow-1 ms-3">
-              <h6 class="mb-0 text-muted">À traiter</h6>
-              <h3 class="mb-0" id="stat-pending">0</h3>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-      <div class="card stat-card bg-success bg-opacity-10 border-0">
-        <div class="card-body">
-          <div class="d-flex align-items-center">
-            <div class="flex-shrink-0">
-              <i class="bi bi-check-circle-fill text-success fs-3"></i>
-            </div>
-            <div class="flex-grow-1 ms-3">
-              <h6 class="mb-0 text-muted">Traités</h6>
-              <h3 class="mb-0" id="stat-treated">0</h3>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-3 col-sm-6">
-      <div class="card stat-card bg-danger bg-opacity-10 border-0">
-        <div class="card-body">
-          <div class="d-flex align-items-center">
-            <div class="flex-shrink-0">
-              <i class="bi bi-arrow-repeat text-danger fs-3"></i>
-            </div>
-            <div class="flex-grow-1 ms-3">
-              <h6 class="mb-0 text-muted">Reportés</h6>
-              <h3 class="mb-0" id="stat-postponed">0</h3>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+  <!-- Bouton retour -->
+  <div class="mb-3">
+    <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Retour
+    </a>
   </div>
 
   <!-- Chargement -->
@@ -176,108 +241,216 @@
     <div class="spinner-border text-primary" role="status">
       <span class="visually-hidden">Chargement...</span>
     </div>
-    <p class="mt-3 text-muted">Chargement des tickets nationaux...</p>
+    <p class="mt-3 text-muted">Chargement du ticket...</p>
   </div>
 
-  <!-- Tableau des tickets nationaux -->
-  <div id="meetings-table-container" class="d-none">
-    <div class="table-responsive">
-      <table class="table table-hover table-meetings align-middle">
-        <thead>
-          <tr>
-            <th scope="col" style="width: 90px;">ID</th>
-            <th scope="col">Titre</th>
-            <th scope="col">Demandeur</th>
-            <th scope="col">Catégorie</th>
-            <th scope="col">Priorité</th>
-            <th scope="col">Statut</th>
-            <th scope="col">Statut Réunion</th>
-            <th scope="col">Groom</th>
-            <th scope="col" class="no-print" style="width: 170px;">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="meetings-table-body">
-          <!-- Les tickets seront injectés ici par JavaScript -->
-        </tbody>
-      </table>
-    </div>
+  <!-- Erreur -->
+  <div id="error" class="alert alert-danger d-none" role="alert">
+    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+    <span id="error-message">Erreur lors du chargement du ticket</span>
   </div>
 
-  <!-- Message vide -->
-  <div id="empty" class="empty-state d-none">
-    <div class="empty-state-icon">
-      <i class="bi bi-calendar-x"></i>
+  <!-- Contenu du ticket -->
+  <div id="ticket-content" class="d-none">
+
+    <div class="ticket-detail-card">
+
+      <!-- En-tête -->
+      <div class="ticket-header">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+          <div>
+            <h3 class="mb-2" id="ticket-title">Titre du ticket</h3>
+            <div id="ticket-badges"></div>
+          </div>
+          <div class="text-end">
+            <small class="d-block opacity-75">Ticket #<span id="ticket-id"></span></small>
+            <small class="d-block opacity-75">Créé le <span id="ticket-created"></span></small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Informations principales -->
+      <div class="info-section">
+        <div class="row">
+          <div class="col-md-6 mb-3 mb-md-0">
+            <div class="info-label">Demandeur</div>
+            <div class="info-value">
+              <i class="bi bi-person-fill me-2"></i>
+              <span id="requester-name"></span>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="info-label">Catégorie / Type</div>
+            <div class="info-value">
+              <i class="bi bi-tag-fill me-2"></i>
+              <span id="ticket-category"></span>
+              <span id="ticket-type" class="text-muted"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <div class="row">
+          <div class="col-md-6 mb-3 mb-md-0">
+            <div class="info-label">Assigné à</div>
+            <div class="info-value">
+              <i class="bi bi-person-badge-fill me-2"></i>
+              <span id="assigned-name">Non assigné</span>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="info-label">Dernière mise à jour</div>
+            <div class="info-value">
+              <i class="bi bi-clock-fill me-2"></i>
+              <span id="ticket-updated"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="info-section">
+        <div class="info-label">Description</div>
+        <div class="info-value" id="ticket-description">
+          Aucune description fournie.
+        </div>
+      </div>
+
+      <!-- Pièces jointes -->
+      <div class="info-section d-none" id="attachments-section">
+        <div class="info-label">
+          <i class="bi bi-paperclip me-1"></i>Pièces jointes
+        </div>
+        <div class="attachments-grid" id="attachments-list"></div>
+      </div>
+
+      <!-- ====== TOGGLE TICKET NATIONAL + CHAMP GROOM ====== -->
+      <div class="info-section d-none" id="national-section">
+        <div class="info-label">
+          <i class="bi bi-flag-fill me-1"></i> Portée nationale
+        </div>
+        <div class="national-toggle-wrapper">
+          <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            <div class="d-flex align-items-center">
+              <div class="national-icon-circle me-3" id="national-icon">
+                <i class="bi bi-globe2"></i>
+              </div>
+              <div>
+                <span class="fw-semibold" id="national-label">Ticket local</span>
+                <br>
+                <small class="text-muted" id="national-hint">
+                  Activer pour signaler ce ticket au niveau national (réunion).
+                </small>
+              </div>
+            </div>
+            <div class="form-check form-switch national-switch">
+              <input class="form-check-input" type="checkbox" role="switch"
+                     id="toggle-national" disabled>
+              <label class="form-check-label visually-hidden" for="toggle-national">
+                Ticket national
+              </label>
+            </div>
+          </div>
+
+          <!-- Champ lien Groom -->
+          <div class="national-groom-row mt-3 pt-3">
+            <label for="groom-link" class="form-label small mb-1">
+              <i class="bi bi-link-45deg me-1"></i> Ticket groom (lien)
+            </label>
+            <div class="input-group input-group-sm">
+              <input type="url" class="form-control" id="groom-link"
+                     placeholder="https://... (lien vers le ticket groom)" disabled>
+              <button class="btn btn-outline-primary" type="button" id="btn-save-groom" disabled
+                      title="Enregistrer le lien">
+                <i class="bi bi-save"></i>
+              </button>
+              <a href="#" class="btn btn-outline-secondary d-none" id="btn-open-groom"
+                 target="_blank" rel="noopener noreferrer" title="Ouvrir le lien groom">
+                <i class="bi bi-box-arrow-up-right"></i>
+              </a>
+            </div>
+            <small class="text-muted d-block mt-1">
+              Ce lien apparaîtra dans le tableau de la page Réunions.
+            </small>
+          </div>
+
+          <div class="national-flag-info d-none" id="national-flag-info"></div>
+        </div>
+      </div>
+      <!-- ====== /TOGGLE TICKET NATIONAL ====== -->
+
+      <!-- Actions (admin uniquement) -->
+      <div class="info-section d-none" id="admin-actions">
+        <div class="info-label">Actions</div>
+        <div class="action-buttons">
+          <button class="btn btn-sm btn-primary" id="btn-take-ticket">
+            <i class="bi bi-hand-thumbs-up-fill me-1"></i> Prendre en charge
+          </button>
+          <button class="btn btn-sm btn-success" id="btn-resolve-ticket">
+            <i class="bi bi-check-circle-fill me-1"></i> Marquer comme résolu
+          </button>
+          <button class="btn btn-sm btn-warning" id="btn-progress-ticket">
+            <i class="bi bi-hourglass-split me-1"></i> Mettre en attente
+          </button>
+          <button class="btn btn-sm btn-danger" id="btn-close-ticket">
+            <i class="bi bi-x-circle-fill me-1"></i> Fermer
+          </button>
+        </div>
+      </div>
+
+      <!-- Section Chat / Discussion -->
+      <div class="info-section" style="padding: 0;">
+        <div class="info-label p-3 pb-0">
+          <i class="bi bi-chat-dots me-1"></i> Discussion
+        </div>
+
+        <div id="chat-container">
+          <div id="chat-messages"></div>
+
+          <div id="chat-input-area">
+            <div class="chat-input-wrapper">
+              <textarea
+                class="form-control"
+                id="new-comment"
+                rows="3"
+                placeholder="Écrivez votre message..."></textarea>
+              <button class="btn btn-primary" id="btn-add-comment" type="button" title="Envoyer">
+                <i class="bi bi-send-fill"></i>
+              </button>
+            </div>
+            <p class="chat-hint">
+              <i class="bi bi-info-circle me-1"></i><kbd>Entrée</kbd> pour envoyer &nbsp;·&nbsp; <kbd>Shift+Entrée</kbd> pour un saut de ligne
+            </p>
+          </div>
+        </div>
+
+      </div>
+
     </div>
-    <h5 class="mt-3">Aucun ticket national pour le moment</h5>
-    <p class="text-muted mb-4">Les tickets marqués comme "nationaux" apparaîtront ici pour la préparation des réunions.</p>
-    <a href="tickets.html" class="btn btn-primary">
-      <i class="bi bi-arrow-left me-1"></i> Voir tous les tickets
-    </a>
+
   </div>
 
 </main>
 
-<!-- Pied de page -->
-<footer class="text-center py-4 bg-light border-top mt-5">
-  <small class="text-muted">© 2026 • Centre d'assistance – Méthodes Logistiques</small>
+<footer class="text-center py-4 mt-5">
+  <small>© 2026 • Centre d'assistance – Méthodes Logistiques</small>
 </footer>
 
 <!-- Toast -->
 <div class="toast-container position-fixed bottom-0 end-0 p-3">
   <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
     <div class="toast-header">
-      <strong class="me-auto">Centre d'assistance</strong>
+      <strong class="me-auto">Notification</strong>
+      <small>Info</small>
       <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Fermer"></button>
     </div>
-    <div id="toast-body" class="toast-body"></div>
+    <div id="toast-body" class="toast-body">Message…</div>
   </div>
 </div>
 
-<!-- Modal pour notes de réunion -->
-<div class="modal fade" id="meetingNotesModal" tabindex="-1" aria-labelledby="meetingNotesModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="meetingNotesModalLabel">
-          <i class="bi bi-journal-text me-2"></i>
-          Notes de réunion
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <h6 id="modal-ticket-title"></h6>
-          <small class="text-muted" id="modal-ticket-info"></small>
-        </div>
-        <div class="mb-3">
-          <label for="meeting-notes-textarea" class="form-label">Notes / Décisions prises</label>
-          <textarea class="form-control" id="meeting-notes-textarea" rows="8"
-                    placeholder="Saisissez les notes, décisions ou actions à prendre pour ce ticket..."></textarea>
-        </div>
-        <div class="mb-3">
-          <label for="meeting-status-select" class="form-label">Statut pour la prochaine réunion</label>
-          <select class="form-select" id="meeting-status-select">
-            <option value="pending">À traiter (reste dans la liste)</option>
-            <option value="treated">Traité (archivé)</option>
-            <option value="postponed">Reporté à la prochaine réunion</option>
-          </select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-primary" id="btn-save-meeting-notes">
-          <i class="bi bi-save me-1"></i> Enregistrer
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<script type="module" src="assets/js/app.js"></script>
-<script type="module" src="assets/js/meetings.js"></script>
+<script type="module" src="assets/js/ticket-detail.js"></script>
 <script type="module" src="assets/js/session-guard.js"></script>
-
 </body>
 </html>

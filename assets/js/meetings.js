@@ -1,463 +1,786 @@
-/**
- * ============================================================
- *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
- * ============================================================
- *  Dépendances :
- *    - assets/js/firebase-init.js (exporte db & auth)
- *    - Bootstrap 5.3.2 + Bootstrap Icons (chargés dans meetings.html)
- *
- *  Rôles du fichier :
- *    1. Écouter en temps réel les tickets où isNational == true
- *    2. Les afficher dans le tableau de meetings.html
- *    3. Filtrer par statut de réunion et par priorité
- *    4. Calculer les compteurs (statistiques rapides)
- *    5. Gérer les notes de réunion + changement de statut (modal)
- *    6. Afficher le lien "Groom" de chaque ticket
- *    7. Permettre l'impression / export de la liste
- * ============================================================
- */
+// assets/js/ticket-detail.js
+// Page de détail d'un ticket avec système de chat (+ édition et suppression des messages)
+// + Toggle "Ticket national" et champ "Lien Groom"
 
-// ------------------------------------------------------------
-// 1. IMPORTS FIREBASE (SDK 10.7.1 — même version que firebase-init.js)
-// ------------------------------------------------------------
+import './app.js';
 import { db, auth } from './firebase-init.js';
+import { requireAuth, toast, badgeForStatus, badgeForPriority, formatDate } from './app.js';
+
 import {
-  collection,
-  query,
-  where,
-  onSnapshot,
-  doc,
-  updateDoc,
+  doc, getDoc, updateDoc, deleteDoc, collection, addDoc, query, orderBy, onSnapshot, Timestamp,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-// ------------------------------------------------------------
-// 2. CONFIGURATION & ÉTAT GLOBAL
-// ------------------------------------------------------------
+let currentTicket = null;
+let currentUser = null;
+let isAdmin = false;
+let unsubscribeComments = null;
 
-// Correspondance des champs : adaptez si votre schéma Firestore
-// utilise d'autres noms (le code testera chaque alias dans l'ordre).
-const FIELD_MAP = {
-  title:        ['title', 'titre', 'subject', 'objet'],
-  requester:    ['requesterName', 'requester', 'userName', 'demandeur', 'createdByName'],
-  category:     ['category', 'categorie'],
-  priority:     ['priority', 'priorite'],
-  status:       ['status', 'statut'],
-  ticketNumber: ['ticketNumber', 'number', 'numero'],
-  createdAt:    ['createdAt', 'dateCreation', 'created_at']
-};
-
-// Libellés + icônes des statuts de réunion
-const MEETING_STATUS = {
-  pending:   { label: 'À traiter', icon: 'bi-hourglass-split' },
-  treated:   { label: 'Traité',    icon: 'bi-check-circle-fill' },
-  postponed: { label: 'Reporté',   icon: 'bi-arrow-repeat' }
-};
-
-let allTickets = [];         // Source de vérité : tous les tickets nationaux
-let currentTicketId = null;  // Ticket actuellement ouvert dans la modal
-let unsubscribe = null;      // Fonction de désabonnement onSnapshot
-
-const filters = {
-  meetingStatus: '',
-  priority: ''
-};
-
-// ------------------------------------------------------------
-// 3. RÉFÉRENCES DOM
-// ------------------------------------------------------------
-const $ = (id) => document.getElementById(id);
-
-const DOM = {
-  loading:          $('loading'),
-  tableContainer:   $('meetings-table-container'),
-  tableBody:        $('meetings-table-body'),
-  emptyState:       $('empty'),
-  filterStatus:     $('filter-meeting-status'),
-  filterPriority:   $('filter-priority'),
-  btnResetFilters:  $('btn-reset-filters'),
-  btnExportPdf:     $('btn-export-pdf'),
-  statTotal:        $('stat-total'),
-  statPending:      $('stat-pending'),
-  statTreated:      $('stat-treated'),
-  statPostponed:    $('stat-postponed'),
-  modalElement:     $('meetingNotesModal'),
-  modalTitle:       $('modal-ticket-title'),
-  modalInfo:        $('modal-ticket-info'),
-  modalNotes:       $('meeting-notes-textarea'),
-  modalStatus:      $('meeting-status-select'),
-  btnSaveNotes:     $('btn-save-meeting-notes'),
-  toastElement:     $('toast'),
-  toastBody:        $('toast-body')
-};
-
-// ------------------------------------------------------------
-// 4. INITIALISATION
-// ------------------------------------------------------------
-document.addEventListener('DOMContentLoaded', () => {
-  bindEvents();
-  subscribeNationalTickets();
-});
-
-function bindEvents() {
-  DOM.filterStatus.addEventListener('change', onFilterChange);
-  DOM.filterPriority.addEventListener('change', onFilterChange);
-  DOM.btnResetFilters.addEventListener('click', resetFilters);
-  DOM.btnSaveNotes.addEventListener('click', saveMeetingNotes);
-
-  // Délégation d'événements : un seul listener pour tout le tableau
-  DOM.tableBody.addEventListener('click', onTableAction);
+// Récupérer l'ID du ticket depuis l'URL
+function getTicketIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('id');
 }
 
-// ------------------------------------------------------------
-// 5. ÉCOUTE TEMPS RÉEL FIRESTORE
-// ------------------------------------------------------------
-function subscribeNationalTickets() {
-  const q = query(collection(db, 'tickets'), where('isNational', '==', true));
+// Charger le ticket
+async function loadTicket(ticketId) {
+  console.log('[ticket-detail] Chargement du ticket:', ticketId);
 
-  unsubscribe = onSnapshot(q, (snapshot) => {
-    allTickets = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+  try {
+    const ticketRef = doc(db, 'tickets', ticketId);
+    const ticketSnap = await getDoc(ticketRef);
 
-    // Tri client : plus récent d'abord (évite un index composite Firestore)
-    allTickets.sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt));
+    if (!ticketSnap.exists()) {
+      showError('Ticket introuvable');
+      return;
+    }
 
-    refreshStats();
-    renderTable();
-    hideLoading();
-  }, (error) => {
-    console.error('[meetings] Erreur Firestore :', error);
-    showToast('Erreur lors du chargement des tickets nationaux.', 'danger');
-    hideLoading();
+    currentTicket = { id: ticketSnap.id, ...ticketSnap.data() };
+    console.log('[ticket-detail] Ticket chargé:', currentTicket);
+
+    displayTicket(currentTicket);
+
+    if (currentUser) {
+      loadComments(ticketId);
+    } else {
+      console.error('[ticket-detail] currentUser non défini !');
+    }
+
+  } catch (error) {
+    console.error('[ticket-detail] Erreur de chargement:', error);
+    showError('Erreur lors du chargement du ticket: ' + error.message);
+  }
+}
+
+// Afficher le ticket
+function displayTicket(ticket) {
+  document.getElementById('loading').classList.add('d-none');
+  document.getElementById('ticket-content').classList.remove('d-none');
+
+  document.getElementById('ticket-title').textContent = ticket.title || 'Sans titre';
+  document.getElementById('ticket-id').textContent = ticket.id;
+
+  const badgesDiv = document.getElementById('ticket-badges');
+  badgesDiv.innerHTML = `
+    ${badgeForStatus(ticket.status)}
+    ${badgeForPriority(ticket.priority)}
+  `;
+
+  document.getElementById('ticket-created').textContent = formatDate(ticket.createdAt);
+  document.getElementById('ticket-updated').textContent = formatDate(ticket.updatedAt || ticket.createdAt);
+
+  document.getElementById('requester-name').textContent = ticket.userName || 'Utilisateur inconnu';
+
+  document.getElementById('ticket-category').textContent = ticket.category || 'Non spécifiée';
+  const typeSpan = document.getElementById('ticket-type');
+  if (ticket.type) {
+    typeSpan.textContent = ' • ' + ticket.type;
+  }
+
+  const assignedName = ticket.takenBy || ticket.assignedTo || 'Non assigné';
+  document.getElementById('assigned-name').textContent = assignedName;
+
+  const descriptionEl = document.getElementById('ticket-description');
+  descriptionEl.innerHTML = linkify(ticket.description) || 'Aucune description fournie.';
+
+  // Pièces jointes
+  if (ticket.attachments && ticket.attachments.length > 0) {
+    displayAttachments(ticket.attachments);
+  }
+
+  if (isAdmin) {
+    displayAdminActions(ticket);
+  }
+}
+
+// ─────────────────────────────────────────────
+// AFFICHAGE DES PIÈCES JOINTES (Base64)
+// ─────────────────────────────────────────────
+function displayAttachments(attachments) {
+  const section = document.getElementById('attachments-section');
+  const list    = document.getElementById('attachments-list');
+
+  section.classList.remove('d-none');
+  list.innerHTML = '';
+
+  const images = attachments.filter(a =>
+    a.type?.startsWith('image/') || a.data?.startsWith('data:image')
+  );
+
+  attachments.forEach((att) => {
+    const isImage = att.type?.startsWith('image/') || att.data?.startsWith('data:image');
+
+    if (isImage) {
+      const img = document.createElement('img');
+      img.src       = att.data;
+      img.alt       = att.name || 'Pièce jointe';
+      img.title     = att.name || 'Cliquer pour agrandir';
+      img.className = 'attach-thumb';
+      img.addEventListener('click', () => {
+        const idx = images.findIndex(a => a.data === att.data);
+        openLightbox(images, idx);
+      });
+      list.appendChild(img);
+
+    } else {
+      const a = document.createElement('a');
+      a.href      = att.data;
+      a.download  = att.name || 'fichier';
+      a.className = 'attach-file-badge';
+      a.innerHTML = `
+        <i class="bi bi-file-earmark-arrow-down" style="font-size:1.2rem;flex-shrink:0"></i>
+        <div style="overflow:hidden;min-width:0">
+          <div class="attach-file-name">${escapeHtml(att.name || 'Fichier')}</div>
+          <div style="font-size:0.7rem;opacity:0.5">Télécharger</div>
+        </div>
+      `;
+      list.appendChild(a);
+    }
   });
 }
 
-// ------------------------------------------------------------
-// 6. AFFICHAGE
-// ------------------------------------------------------------
-function renderTable() {
-  const tickets = applyFilters(allTickets);
+// ─────────────────────────────────────────────
+// LIGHTBOX
+// ─────────────────────────────────────────────
+function openLightbox(images, startIdx) {
+  document.getElementById('__lightbox')?.remove();
 
-  if (tickets.length === 0) {
-    DOM.tableContainer.classList.add('d-none');
-    DOM.emptyState.classList.remove('d-none');
+  let idx = startIdx;
+
+  const overlay = document.createElement('div');
+  overlay.id = '__lightbox';
+
+  function render() {
+    const cur = images[idx];
+    overlay.innerHTML = `
+      <div class="lb-topbar">
+        <span class="lb-name">
+          <i class="bi bi-paperclip me-1"></i>${escapeHtml(cur.name || 'Image')}
+          ${images.length > 1 ? `<span class="lb-counter">${idx + 1} / ${images.length}</span>` : ''}
+        </span>
+        <div class="lb-controls">
+          <a href="${cur.data}" download="${escapeHtml(cur.name || 'image')}" class="lb-btn" title="Télécharger">
+            <i class="bi bi-download"></i>
+          </a>
+          <button class="lb-btn" id="lb-close" title="Fermer" style="font-size:1.5rem;line-height:1">&times;</button>
+        </div>
+      </div>
+
+      <img class="lb-img" src="${cur.data}" alt="${escapeHtml(cur.name || '')}">
+
+      ${images.length > 1 ? `
+        <button class="lb-nav lb-prev" ${idx === 0 ? 'disabled' : ''} title="Précédent">
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <button class="lb-nav lb-next" ${idx === images.length - 1 ? 'disabled' : ''} title="Suivant">
+          <i class="bi bi-chevron-right"></i>
+        </button>
+      ` : ''}
+    `;
+
+    overlay.querySelector('#lb-close')?.addEventListener('click', close);
+    overlay.querySelector('.lb-prev')?.addEventListener('click', () => { if (idx > 0) { idx--; render(); } });
+    overlay.querySelector('.lb-next')?.addEventListener('click', () => { if (idx < images.length - 1) { idx++; render(); } });
+  }
+
+  function close() {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape')                                 close();
+    if (e.key === 'ArrowLeft'  && idx > 0)                 { idx--; render(); }
+    if (e.key === 'ArrowRight' && idx < images.length - 1) { idx++; render(); }
+  }
+
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.addEventListener('keydown', onKey);
+
+  render();
+  document.body.appendChild(overlay);
+}
+
+// ============================================================
+//  TOGGLE "TICKET NATIONAL" + CHAMP "LIEN GROOM"
+// ============================================================
+function initNationalToggle(ticketId, isAdmin) {
+  const section   = document.getElementById('national-section');
+  const toggle    = document.getElementById('toggle-national');
+  const wrapper   = document.querySelector('.national-toggle-wrapper');
+  const icon      = document.getElementById('national-icon');
+  const label     = document.getElementById('national-label');
+  const hint      = document.getElementById('national-hint');
+  const flagInfo  = document.getElementById('national-flag-info');
+  const groomInput   = document.getElementById('groom-link');
+  const btnSaveGroom = document.getElementById('btn-save-groom');
+  const btnOpenGroom = document.getElementById('btn-open-groom');
+
+  if (!section || !toggle || !wrapper) return;
+
+  section.classList.remove('d-none');
+  toggle.disabled = !isAdmin;
+  if (groomInput)   groomInput.disabled   = !isAdmin;
+  if (btnSaveGroom) btnSaveGroom.disabled = !isAdmin;
+
+  const ticketRef = doc(db, 'tickets', ticketId);
+
+  // Écoute temps réel pour synchroniser l'UI
+  onSnapshot(ticketRef, (snap) => {
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const isNational = data.isNational === true;
+
+    toggle.checked = isNational;
+
+    // Apparence
+    wrapper.classList.toggle('is-national', isNational);
+    icon.innerHTML = isNational
+      ? '<i class="bi bi-globe-americas"></i>'
+      : '<i class="bi bi-globe2"></i>';
+    label.textContent = isNational ? 'Ticket national' : 'Ticket local';
+    hint.textContent = isNational
+      ? 'Ce ticket est visible dans la page de préparation des réunions.'
+      : 'Activer pour signaler ce ticket au niveau national (réunion).';
+
+    if (isNational && data.nationalFlaggedAt) {
+      const d = data.nationalFlaggedAt.toDate ? data.nationalFlaggedAt.toDate() : new Date(data.nationalFlaggedAt);
+      const formatted = d.toLocaleDateString('fr-FR', {
+        day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+      flagInfo.innerHTML = `<i class="bi bi-info-circle"></i> Signalé national le ${formatted}`;
+      flagInfo.classList.remove('d-none');
+    } else {
+      flagInfo.classList.add('d-none');
+    }
+
+    // ── Champ Groom : synchronisation ──
+    if (groomInput && document.activeElement !== groomInput) {
+      groomInput.value = data.groomLink || '';
+    }
+    if (btnOpenGroom) {
+      if (data.groomLink) {
+        btnOpenGroom.href = data.groomLink;
+        btnOpenGroom.classList.remove('d-none');
+      } else {
+        btnOpenGroom.classList.add('d-none');
+      }
+    }
+  });
+
+  // Gestion du changement du toggle
+  toggle.addEventListener('change', async () => {
+    const newValue = toggle.checked;
+    toggle.disabled = true;
+
+    try {
+      const updateData = {
+        isNational: newValue,
+        nationalFlaggedAt: serverTimestamp(),
+        nationalFlaggedBy: auth.currentUser?.uid || null,
+        updatedAt: Timestamp.now()
+      };
+
+      if (!newValue) {
+        updateData.meetingStatus = null;
+        updateData.meetingNotes  = null;
+      } else {
+        updateData.meetingStatus = 'pending';
+      }
+
+      await updateDoc(ticketRef, updateData);
+
+      toast(
+        newValue
+          ? 'Ticket signalé au niveau national — il apparaît désormais dans la préparation des réunions.'
+          : 'Ticket retiré du scope national.'
+      );
+    } catch (error) {
+      console.error('[national-toggle] Erreur :', error);
+      toggle.checked = !newValue;
+      toast('Erreur lors de la mise à jour : ' + error.message);
+    } finally {
+      if (isAdmin) toggle.disabled = false;
+    }
+  });
+
+  // ── Sauvegarde du lien Groom ──
+  async function saveGroomLink() {
+    if (!groomInput) return;
+
+    let value = groomInput.value.trim();
+    // Ajoute https:// si manquant
+    if (value && !/^https?:\/\//i.test(value)) {
+      value = 'https://' + value;
+      groomInput.value = value;
+    }
+
+    btnSaveGroom.disabled = true;
+    try {
+      await updateDoc(ticketRef, {
+        groomLink: value || null,
+        updatedAt: Timestamp.now()
+      });
+      toast(value
+        ? 'Lien groom enregistré — visible dans la page Réunions.'
+        : 'Lien groom supprimé.');
+    } catch (error) {
+      console.error('[groom] Erreur :', error);
+      toast('Erreur lors de l’enregistrement du lien : ' + error.message);
+    } finally {
+      btnSaveGroom.disabled = !isAdmin;
+    }
+  }
+
+  btnSaveGroom?.addEventListener('click', saveGroomLink);
+  groomInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveGroomLink();
+    }
+  });
+}
+// ============================================================
+//  /TOGGLE "TICKET NATIONAL"
+// ============================================================
+
+// Afficher les actions admin
+function displayAdminActions(ticket) {
+  const actionsSection = document.getElementById('admin-actions');
+  actionsSection.classList.remove('d-none');
+
+  const btnTake     = document.getElementById('btn-take-ticket');
+  const btnResolve  = document.getElementById('btn-resolve-ticket');
+  const btnProgress = document.getElementById('btn-progress-ticket');
+  const btnClose    = document.getElementById('btn-close-ticket');
+
+  if (ticket.status === 'Résolu' || ticket.status === 'Fermé') {
+    btnTake.disabled = true;
+    btnResolve.disabled = true;
+    btnProgress.disabled = true;
+  }
+
+  if (ticket.status === 'Fermé') {
+    btnClose.disabled = true;
+  }
+
+  btnTake.onclick     = () => takeTicket();
+  btnResolve.onclick  = () => updateTicketStatus('Résolu');
+  btnProgress.onclick = () => updateTicketStatus('En attente');
+  btnClose.onclick    = () => closeTicket();
+}
+
+// Prendre en charge un ticket
+async function takeTicket() {
+  if (!currentTicket || !currentUser) return;
+
+  try {
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+    const userName = currentUser.displayName || currentUser.email;
+
+    await updateDoc(ticketRef, {
+      status: 'En cours',
+      takenBy: userName,
+      takenByUid: currentUser.uid,
+      updatedAt: Timestamp.now()
+    });
+
+    toast('Ticket pris en charge avec succès');
+    await loadTicket(currentTicket.id);
+
+  } catch (error) {
+    console.error('[ticket-detail] Erreur prise en charge:', error);
+    toast('Erreur lors de la prise en charge: ' + error.message);
+  }
+}
+
+// Mettre à jour le statut
+async function updateTicketStatus(newStatus) {
+  if (!currentTicket) return;
+
+  try {
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+
+    await updateDoc(ticketRef, {
+      status: newStatus,
+      updatedAt: Timestamp.now()
+    });
+
+    toast(`Statut mis à jour : ${newStatus}`);
+    await loadTicket(currentTicket.id);
+
+  } catch (error) {
+    console.error('[ticket-detail] Erreur mise à jour statut:', error);
+    toast('Erreur lors de la mise à jour: ' + error.message);
+  }
+}
+
+// Fermer le ticket
+async function closeTicket() {
+  if (!currentTicket) return;
+
+  if (!confirm('Êtes-vous sûr de vouloir fermer ce ticket ?')) return;
+
+  try {
+    const ticketRef = doc(db, 'tickets', currentTicket.id);
+
+    await updateDoc(ticketRef, {
+      status: 'Fermé',
+      closedAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+
+    toast('Ticket fermé avec succès');
+    await loadTicket(currentTicket.id);
+
+  } catch (error) {
+    console.error('[ticket-detail] Erreur fermeture:', error);
+    toast('Erreur lors de la fermeture: ' + error.message);
+  }
+}
+
+// ===== SYSTÈME DE CHAT =====
+
+function loadComments(ticketId) {
+  console.log('[chat] Chargement des commentaires pour ticket:', ticketId);
+
+  const chatContainer = document.getElementById('chat-messages');
+  if (!chatContainer) {
+    console.error('[chat] Element #chat-messages non trouvé !');
     return;
   }
 
-  DOM.emptyState.classList.add('d-none');
-  DOM.tableContainer.classList.remove('d-none');
+  if (unsubscribeComments) {
+    unsubscribeComments();
+  }
 
-  DOM.tableBody.innerHTML = tickets.map(buildRow).join('');
-  initTooltips();
-}
+  chatContainer.innerHTML = '<div class="text-center text-muted py-3"><i class="bi bi-hourglass-split"></i> Chargement des messages...</div>';
 
-function buildRow(ticket) {
-  const id          = ticket.id;
-  const number      = getField(ticket, 'ticketNumber') || id.substring(0, 6).toUpperCase();
-  const title       = getField(ticket, 'title') || 'Sans titre';
-  const requester   = getField(ticket, 'requester') || 'Utilisateur';
-  const category    = getField(ticket, 'category') || 'Autre';
-  const priority    = getField(ticket, 'priority') || 'Moyenne';
-  const status      = getField(ticket, 'status') || 'Ouvert';
-  const meetStatus  = ticket.meetingStatus || 'pending';
+  try {
+    const commentsRef = collection(db, 'tickets', ticketId, 'comments');
+    const q = query(commentsRef, orderBy('createdAt', 'asc'));
 
-  return `
-    <tr class="fade-in" data-id="${id}">
-      <td><span class="fw-bold text-primary">#${escapeHtml(number)}</span></td>
-      <td>
-        <div class="d-flex flex-column">
-          <span class="fw-semibold">${escapeHtml(title)}</span>
-          <small class="text-muted">${formatDate(getField(ticket, 'createdAt'))}</small>
-        </div>
-      </td>
-      <td>
-        <div class="d-flex align-items-center">
-          <div class="avatar-circle me-2" style="width:28px;height:28px;font-size:.7rem;">
-            ${initials(requester)}
+    unsubscribeComments = onSnapshot(q, (snapshot) => {
+      console.log('[chat] Snapshot reçu, nb docs:', snapshot.size);
+
+      chatContainer.innerHTML = '';
+
+      if (snapshot.empty) {
+        chatContainer.innerHTML = `
+          <div class="text-center text-muted py-4">
+            <i class="bi bi-chat-dots fs-1 d-block mb-2"></i>
+            Aucun message pour le moment.<br>
+            <small>Soyez le premier à écrire !</small>
           </div>
-          <span>${escapeHtml(requester)}</span>
+        `;
+        return;
+      }
+
+      snapshot.forEach((docSnap) => {
+        const comment = docSnap.data();
+        const commentId = docSnap.id;
+        console.log('[chat] Message:', comment);
+
+        const isCurrentUser = currentUser && comment.createdBy === currentUser.uid;
+        const canAct = isCurrentUser || isAdmin;
+
+        const editedLabel = comment.editedAt
+          ? `<span class="chat-edited-label"><i class="bi bi-pencil"></i> modifié</span>`
+          : '';
+
+        const bubble = document.createElement('div');
+        bubble.className = `chat-message ${isCurrentUser ? 'user-message' : 'admin-message'}`;
+
+        bubble.innerHTML = `
+          <div class="chat-bubble">
+            ${canAct ? `
+              <div class="chat-actions">
+                <button class="btn-chat-action btn-chat-edit" title="Modifier">
+                  <i class="bi bi-pencil-fill"></i>
+                </button>
+                <button class="btn-chat-action btn-chat-delete" title="Supprimer">
+                  <i class="bi bi-trash-fill"></i>
+                </button>
+              </div>
+            ` : ''}
+            <div class="chat-author">${escapeHtml(comment.userName || 'Utilisateur')}</div>
+            <div class="chat-text" id="chat-text-${commentId}">${linkify(comment.text || '')}</div>
+            <div class="chat-edit-area d-none" id="chat-edit-${commentId}">
+              <textarea class="form-control form-control-sm mb-2" rows="2">${escapeHtml(comment.text || '')}</textarea>
+              <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-success btn-save-edit">
+                  <i class="bi bi-check-lg me-1"></i>Sauvegarder
+                </button>
+                <button class="btn btn-sm btn-secondary btn-cancel-edit">
+                  <i class="bi bi-x-lg me-1"></i>Annuler
+                </button>
+              </div>
+            </div>
+            <div class="chat-time">${formatCommentDate(comment.createdAt)}${editedLabel}</div>
+          </div>
+        `;
+
+        // ── Bouton MODIFIER ──
+        bubble.querySelector('.btn-chat-edit')?.addEventListener('click', () => {
+          const bubbleEl = bubble.querySelector('.chat-bubble');
+          const messageEl = bubble;
+          const textEl   = document.getElementById(`chat-text-${commentId}`);
+          const editArea = document.getElementById(`chat-edit-${commentId}`);
+          const ta       = editArea?.querySelector('textarea');
+
+          const msgWidth = messageEl.offsetWidth;
+          const bubbleWidth = bubbleEl.offsetWidth;
+          const bubbleHeight = bubbleEl.offsetHeight;
+
+          messageEl.style.width = msgWidth + 'px';
+          bubbleEl.style.width = bubbleWidth + 'px';
+          bubbleEl.style.minHeight = bubbleHeight + 'px';
+
+          textEl.classList.add('d-none');
+          editArea.classList.remove('d-none');
+
+          if (ta) {
+            ta.style.width = '100%';
+            ta.style.boxSizing = 'border-box';
+            ta.style.height = 'auto';
+            ta.style.height = Math.max(ta.scrollHeight, bubbleHeight - 80) + 'px';
+            ta.focus();
+            ta.selectionStart = ta.selectionEnd = ta.value.length;
+          }
+        });
+
+        // ── Bouton ANNULER ──
+        bubble.querySelector('.btn-cancel-edit')?.addEventListener('click', () => {
+          const bubbleEl = bubble.querySelector('.chat-bubble');
+          const messageEl = bubble;
+
+          document.getElementById(`chat-text-${commentId}`)?.classList.remove('d-none');
+          document.getElementById(`chat-edit-${commentId}`)?.classList.add('d-none');
+
+          messageEl.style.width = '';
+          bubbleEl.style.width = '';
+          bubbleEl.style.minHeight = '';
+        });
+
+        // ── Bouton SAUVEGARDER ──
+        bubble.querySelector('.btn-save-edit')?.addEventListener('click', async () => {
+          const textarea = bubble.querySelector('.chat-edit-area textarea');
+          const newText = textarea?.value?.trim();
+          if (!newText) { toast('Le message ne peut pas être vide'); return; }
+
+          const saveBtn = bubble.querySelector('.btn-save-edit');
+          saveBtn.disabled = true;
+          saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+
+          try {
+            await updateDoc(doc(db, 'tickets', currentTicket.id, 'comments', commentId), {
+              text: newText,
+              editedAt: Timestamp.now()
+            });
+            await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
+
+            const bubbleEl = bubble.querySelector('.chat-bubble');
+            bubble.style.width = '';
+            bubbleEl.style.width = '';
+            bubbleEl.style.minHeight = '';
+
+            toast('Message modifié');
+          } catch (error) {
+            console.error('[chat] Erreur modification:', error);
+            toast('Erreur: ' + error.message);
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Sauvegarder';
+          }
+        });
+
+        // ── Raccourcis clavier dans le textarea d'édition ──
+        bubble.querySelector('.chat-edit-area textarea')?.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            bubble.querySelector('.btn-save-edit')?.click();
+          }
+          if (e.key === 'Escape') {
+            bubble.querySelector('.btn-cancel-edit')?.click();
+          }
+        });
+
+        // ── Bouton SUPPRIMER ──
+        bubble.querySelector('.btn-chat-delete')?.addEventListener('click', async () => {
+          if (!confirm('Supprimer ce message définitivement ?')) return;
+          try {
+            await deleteDoc(doc(db, 'tickets', currentTicket.id, 'comments', commentId));
+            await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
+            toast('Message supprimé');
+          } catch (error) {
+            console.error('[chat] Erreur suppression:', error);
+            toast('Erreur: ' + error.message);
+          }
+        });
+
+        chatContainer.appendChild(bubble);
+      });
+
+      chatContainer.scrollTop = chatContainer.scrollHeight;
+
+    }, (error) => {
+      console.error('[chat] Erreur onSnapshot:', error);
+      chatContainer.innerHTML = `
+        <div class="alert alert-danger m-3">
+          <i class="bi bi-exclamation-triangle"></i>
+          Erreur de chargement des messages: ${error.message}
         </div>
-      </td>
-      <td><span class="badge bg-light text-dark border">${escapeHtml(category)}</span></td>
-      <td>${priorityBadge(priority)}</td>
-      <td><span class="badge bg-primary">${escapeHtml(status)}</span></td>
-      <td>${meetingBadge(meetStatus)}</td>
-      <td>${groomCell(ticket.groomLink)}</td>
-      <td class="no-print">
-        <div class="btn-action-group">
-          <button class="btn btn-outline-primary" data-action="notes" data-id="${id}"
-                  title="Notes de réunion" data-bs-toggle="tooltip">
-            <i class="bi bi-journal-text"></i>
-          </button>
-          <button class="btn btn-outline-success" data-action="treated" data-id="${id}"
-                  title="Marquer comme traité" data-bs-toggle="tooltip">
-            <i class="bi bi-check-circle"></i>
-          </button>
-          <button class="btn btn-outline-danger" data-action="unflag" data-id="${id}"
-                  title="Retirer du scope national" data-bs-toggle="tooltip">
-            <i class="bi bi-flag"></i>
-          </button>
-          <a href="ticket-detail.html?id=${id}" class="btn btn-outline-secondary"
-             title="Voir le ticket" data-bs-toggle="tooltip">
-            <i class="bi bi-eye"></i>
-          </a>
-        </div>
-      </td>
-    </tr>`;
-}
-
-// ------------------------------------------------------------
-// 7. ACTIONS DU TABLEAU (délégation)
-// ------------------------------------------------------------
-function onTableAction(event) {
-  const button = event.target.closest('[data-action]');
-  if (!button) return;
-
-  const { action, id } = button.dataset;
-
-  switch (action) {
-    case 'notes':   openNotesModal(id); break;
-    case 'treated': markAsTreated(id);  break;
-    case 'unflag':  unflagNational(id); break;
-  }
-}
-
-async function markAsTreated(id) {
-  if (!confirm('Marquer ce ticket comme traité pour la réunion ?')) return;
-  await updateMeetingFields(id, { meetingStatus: 'treated' }, 'Ticket marqué comme traité.');
-}
-
-async function unflagNational(id) {
-  if (!confirm('Retirer ce ticket du scope national ? Il disparaîtra de cette liste.')) return;
-
-  try {
-    await updateDoc(doc(db, 'tickets', id), {
-      isNational: false,
-      meetingStatus: null,
-      meetingNotes: null,
-      meetingUpdatedAt: serverTimestamp(),
-      meetingUpdatedBy: auth.currentUser?.uid || null
-    });
-    showToast('Ticket retiré du scope national.', 'success');
-  } catch (error) {
-    console.error('[meetings] Erreur unflag :', error);
-    showToast('Erreur lors du retrait du scope national.', 'danger');
-  }
-}
-
-// ------------------------------------------------------------
-// 8. MODAL — NOTES DE RÉUNION
-// ------------------------------------------------------------
-function openNotesModal(id) {
-  const ticket = allTickets.find((t) => t.id === id);
-  if (!ticket) return;
-
-  currentTicketId = id;
-
-  DOM.modalTitle.textContent = getField(ticket, 'title') || 'Sans titre';
-  DOM.modalInfo.textContent  =
-    `Ticket #${getField(ticket, 'ticketNumber') || id.substring(0, 6)} • ` +
-    `Créé le ${formatDate(getField(ticket, 'createdAt'))}`;
-  DOM.modalNotes.value       = ticket.meetingNotes || '';
-  DOM.modalStatus.value      = ticket.meetingStatus || 'pending';
-
-  getModal().show();
-}
-
-async function saveMeetingNotes() {
-  if (!currentTicketId) return;
-
-  setSaveButtonLoading(true);
-
-  try {
-    await updateDoc(doc(db, 'tickets', currentTicketId), {
-      meetingNotes:  DOM.modalNotes.value.trim(),
-      meetingStatus: DOM.modalStatus.value,
-      meetingUpdatedAt: serverTimestamp(),
-      meetingUpdatedBy: auth.currentUser?.uid || null
+      `;
     });
 
-    showToast('Notes de réunion enregistrées.', 'success');
-    getModal().hide();
   } catch (error) {
-    console.error('[meetings] Erreur sauvegarde notes :', error);
-    showToast('Erreur lors de l’enregistrement des notes.', 'danger');
-  } finally {
-    setSaveButtonLoading(false);
-    currentTicketId = null;
+    console.error('[chat] Erreur création query:', error);
+    chatContainer.innerHTML = `
+      <div class="alert alert-danger m-3">
+        Erreur: ${error.message}
+      </div>
+    `;
   }
 }
 
-function setSaveButtonLoading(loading) {
-  DOM.btnSaveNotes.disabled = loading;
-  DOM.btnSaveNotes.innerHTML = loading
-    ? '<span class="spinner-border spinner-border-sm me-1"></span>Enregistrement…'
-    : '<i class="bi bi-save me-1"></i> Enregistrer';
-}
+// ===== UTILITAIRES =====
 
-// ------------------------------------------------------------
-// 9. MISE À JOUR GÉNÉRIQUE FIRESTORE
-// ------------------------------------------------------------
-async function updateMeetingFields(id, fields, successMessage) {
+function formatCommentDate(timestamp) {
+  if (!timestamp) return '';
   try {
-    await updateDoc(doc(db, 'tickets', id), {
-      ...fields,
-      meetingUpdatedAt: serverTimestamp(),
-      meetingUpdatedBy: auth.currentUser?.uid || null
-    });
-    if (successMessage) showToast(successMessage, 'success');
-  } catch (error) {
-    console.error('[meetings] Erreur mise à jour :', error);
-    showToast('Erreur lors de la mise à jour.', 'danger');
-  }
-}
-
-// ------------------------------------------------------------
-// 10. FILTRES
-// ------------------------------------------------------------
-function onFilterChange() {
-  filters.meetingStatus = DOM.filterStatus.value;
-  filters.priority      = DOM.filterPriority.value;
-  renderTable();
-}
-
-function resetFilters() {
-  filters.meetingStatus = '';
-  filters.priority      = '';
-  DOM.filterStatus.value   = '';
-  DOM.filterPriority.value = '';
-  renderTable();
-}
-
-function applyFilters(tickets) {
-  return tickets.filter((t) => {
-    const meetStatus = t.meetingStatus || 'pending';
-    if (filters.meetingStatus && meetStatus !== filters.meetingStatus) return false;
-    if (filters.priority && getField(t, 'priority') !== filters.priority) return false;
-    return true;
-  });
-}
-
-// ------------------------------------------------------------
-// 11. STATISTIQUES
-// ------------------------------------------------------------
-function refreshStats() {
-  const count = (status) =>
-    allTickets.filter((t) => (t.meetingStatus || 'pending') === status).length;
-
-  animateCounter(DOM.statTotal,     allTickets.length);
-  animateCounter(DOM.statPending,   count('pending'));
-  animateCounter(DOM.statTreated,   count('treated'));
-  animateCounter(DOM.statPostponed, count('postponed'));
-}
-
-function animateCounter(element, target) {
-  if (!element) return;
-  const start    = parseInt(element.textContent, 10) || 0;
-  const duration = 400;
-  const steps    = 20;
-  const increment = (target - start) / steps;
-  let current = start;
-  let step = 0;
-
-  const timer = setInterval(() => {
-    step++;
-    current += increment;
-    if (step >= steps) {
-      element.textContent = target;
-      clearInterval(timer);
+    let date;
+    if (timestamp.toDate) {
+      date = timestamp.toDate();
+    } else if (timestamp.seconds) {
+      date = new Date(timestamp.seconds * 1000);
     } else {
-      element.textContent = Math.round(current);
+      date = new Date(timestamp);
     }
-  }, duration / steps);
-}
-
-// ------------------------------------------------------------
-// 12. UTILITAIRES
-// ------------------------------------------------------------
-function getField(ticket, key) {
-  const aliases = FIELD_MAP[key] || [key];
-  for (const alias of aliases) {
-    if (ticket[alias] !== undefined && ticket[alias] !== null && ticket[alias] !== '') {
-      return ticket[alias];
-    }
+    return date.toLocaleString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
+  } catch (e) {
+    console.error('[chat] Erreur formatage date:', e);
+    return '';
   }
-  return null;
-}
-
-function toDate(value) {
-  if (!value) return new Date(0);
-  if (value.toDate) return value.toDate();       // Timestamp Firestore
-  const d = new Date(value);
-  return isNaN(d) ? new Date(0) : d;
-}
-
-function formatDate(value) {
-  if (!value) return 'N/A';
-  return toDate(value).toLocaleDateString('fr-FR', {
-    day: '2-digit', month: 'short', year: 'numeric'
-  });
-}
-
-function initials(name) {
-  if (!name) return 'U';
-  return name.split(' ').map((p) => p.charAt(0)).join('').toUpperCase().substring(0, 2);
 }
 
 function escapeHtml(text) {
-  if (text === null || text === undefined) return '';
-  const div = document.createElement('div');
-  div.textContent = String(text);
-  return div.innerHTML;
+  if (!text) return '';
+  const map = { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#039;' };
+  return String(text).replace(/[&<>"']/g, m => map[m]);
 }
 
-function priorityBadge(priority) {
-  const cls = (priority || 'Moyenne').toLowerCase();
-  return `<span class="badge-priority ${escapeHtml(cls)}">${escapeHtml(priority)}</span>`;
+function linkify(text) {
+  if (!text) return '';
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+  return escapeHtml(text).replace(urlRegex, url =>
+    `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+  );
 }
 
-function meetingBadge(status) {
-  const info = MEETING_STATUS[status] || MEETING_STATUS.pending;
-  return `
-    <span class="badge-meeting-status ${escapeHtml(status)}">
-      <i class="bi ${info.icon}"></i> ${info.label}
-    </span>`;
+function resetTextareaHeight() {
+  const textarea = document.getElementById('new-comment');
+  if (textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = '90px';
+  }
 }
 
-function groomCell(link) {
-  if (!link) return '<span class="text-muted">—</span>';
-  return `
-    <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"
-       class="groom-link" title="Ouvrir le ticket groom">
-      <i class="bi bi-link-45deg"></i> Groom
-    </a>`;
+async function addComment(text) {
+  console.log('[chat] Tentative ajout message:', text);
+
+  if (!currentTicket) { toast('Erreur: ticket non chargé'); return; }
+  if (!currentUser)   { toast('Erreur: vous devez être connecté'); return; }
+  if (!text || text.trim() === '') { toast('Le message ne peut pas être vide'); return; }
+
+  const btnSend = document.getElementById('btn-add-comment');
+  const textarea = document.getElementById('new-comment');
+
+  try {
+    if (btnSend) {
+      btnSend.disabled = true;
+      btnSend.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+    }
+
+    await addDoc(collection(db, 'tickets', currentTicket.id, 'comments'), {
+      text: text.trim(),
+      createdBy: currentUser.uid,
+      userName: currentUser.displayName || currentUser.email || 'Utilisateur',
+      createdAt: Timestamp.now()
+    });
+
+    console.log('[chat] Message ajouté avec succès');
+    if (textarea) { textarea.value = ''; resetTextareaHeight(); }
+    await updateDoc(doc(db, 'tickets', currentTicket.id), { updatedAt: Timestamp.now() });
+
+  } catch (error) {
+    console.error('[chat] Erreur ajout message:', error);
+    toast('Erreur lors de l\'envoi: ' + error.message);
+  } finally {
+    if (btnSend) {
+      btnSend.disabled = false;
+      btnSend.innerHTML = '<i class="bi bi-send-fill"></i>';
+    }
+  }
 }
 
-function getModal() {
-  return bootstrap.Modal.getOrCreateInstance(DOM.modalElement);
+function showError(message) {
+  document.getElementById('loading').classList.add('d-none');
+  document.getElementById('error').classList.remove('d-none');
+  document.getElementById('error-message').textContent = message;
 }
 
-function initTooltips() {
-  if (!window.bootstrap?.Tooltip) return;
-  DOM.tableBody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
-    bootstrap.Tooltip.getOrCreateInstance(el, { delay: { show: 300, hide: 100 } });
-  });
-}
+// ===== EVENT LISTENERS =====
 
-function hideLoading() {
-  DOM.loading?.classList.add('d-none');
-}
-
-function showToast(message, type = 'info') {
-  if (!DOM.toastElement) return;
-  DOM.toastBody.textContent = message;
-  DOM.toastElement.classList.remove('border-primary', 'border-success', 'border-danger', 'border-warning');
-  DOM.toastElement.classList.add(`border-${type}`);
-  bootstrap.Toast.getOrCreateInstance(DOM.toastElement, { delay: 3000 }).show();
-}
-
-// ------------------------------------------------------------
-// 13. NETTOYAGE (si l'utilisateur quitte la page)
-// ------------------------------------------------------------
-window.addEventListener('beforeunload', () => {
-  if (unsubscribe) unsubscribe();
+document.getElementById('btn-add-comment')?.addEventListener('click', () => {
+  const textarea = document.getElementById('new-comment');
+  if (textarea) addComment(textarea.value);
 });
+
+document.getElementById('new-comment')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    addComment(e.target.value);
+  }
+});
+
+document.getElementById('new-comment')?.addEventListener('input', function () {
+  this.style.height = 'auto';
+  const newHeight = Math.min(this.scrollHeight, 200);
+  this.style.height = Math.max(newHeight, 90) + 'px';
+});
+
+// ===== INITIALISATION =====
+(async () => {
+  console.log('[ticket-detail] ===== INITIALISATION =====');
+
+  const ticketId = getTicketIdFromUrl();
+  console.log('[ticket-detail] Ticket ID depuis URL:', ticketId);
+
+  if (!ticketId) {
+    showError('Aucun ID de ticket fourni dans l\'URL');
+    return;
+  }
+
+  const user = await requireAuth(true);
+  console.log('[ticket-detail] Utilisateur après requireAuth:', user);
+
+  if (!user) {
+    showError('Vous devez être connecté pour voir ce ticket');
+    return;
+  }
+
+  currentUser = user;
+  isAdmin = window.__isAdmin === true;
+
+  console.log('[ticket-detail] currentUser défini:', currentUser.email);
+  console.log('[ticket-detail] isAdmin:', isAdmin);
+
+  await loadTicket(ticketId);
+
+  // Initialiser le toggle "Ticket national" + champ "Groom"
+  initNationalToggle(ticketId, isAdmin);
+
+  console.log('[ticket-detail] ===== INITIALISATION TERMINÉE =====');
+})();

@@ -102,7 +102,6 @@ function bindEvents() {
   DOM.filterStatus.addEventListener('change', onFilterChange);
   DOM.filterPriority.addEventListener('change', onFilterChange);
   DOM.btnResetFilters.addEventListener('click', resetFilters);
-  DOM.btnExportPdf.addEventListener('click', () => window.print());
   DOM.btnSaveNotes.addEventListener('click', saveMeetingNotes);
 
   // Délégation d'événements : un seul listener pour tout le tableau
@@ -231,6 +230,8 @@ async function unflagNational(id) {
   try {
     await updateDoc(doc(db, 'tickets', id), {
       isNational: false,
+      meetingStatus: null,
+      meetingNotes: null,
       meetingUpdatedAt: serverTimestamp(),
       meetingUpdatedBy: auth.currentUser?.uid || null
     });

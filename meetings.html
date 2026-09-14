@@ -9,73 +9,6 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/styles.css">
   <link rel="stylesheet" href="assets/css/meetings.css">
-  <style>
-    /* Styles spécifiques pour cette page */
-    .ticket-national-badge {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 0.25rem 0.5rem;
-      border-radius: 0.25rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-    
-    .meeting-status-badge {
-      padding: 0.25rem 0.5rem;
-      border-radius: 0.25rem;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-    
-    .meeting-status-pending {
-      background-color: #fff3cd;
-      color: #856404;
-    }
-    
-    .meeting-status-treated {
-      background-color: #d1e7dd;
-      color: #0f5132;
-    }
-    
-    .meeting-status-postponed {
-      background-color: #f8d7da;
-      color: #842029;
-    }
-    
-    .table-meetings th {
-      background-color: #f8f9fa;
-      border-bottom: 2px solid #dee2e6;
-      font-weight: 600;
-      font-size: 0.875rem;
-    }
-    
-    .table-meetings td {
-      vertical-align: middle;
-    }
-    
-    .btn-action-group .btn {
-      padding: 0.25rem 0.5rem;
-      font-size: 0.875rem;
-    }
-    
-    @media print {
-      .no-print {
-        display: none !important;
-      }
-      
-      .table-meetings {
-        font-size: 0.8rem;
-      }
-      
-      .navbar, footer {
-        display: none;
-      }
-      
-      .page-header {
-        margin-bottom: 1rem;
-      }
-    }
-  </style>
 </head>
 <body>
 
@@ -101,7 +34,7 @@
         <li class="nav-item d-none" id="nav-stats"><a class="nav-link" href="stats-v2.html">Statistiques</a></li>
         <li class="nav-item d-none" id="nav-stats-tech"><a class="nav-link" href="stats-tech.html">Statistiques Tech</a></li>
         <li class="nav-item">
-          <a class="nav-link" href="iabdc.html" target="_blank" rel="noopener noreferrer">IA</a>
+          <a class="nav-link" href="https://ticket-glpi-git-main-micfris-projects.vercel.app/iabdc.html" target="_blank" rel="noopener noreferrer">IA</a>
         </li>
       </ul>
       <div class="d-flex align-items-center gap-2">
@@ -117,7 +50,7 @@
 </nav>
 
 <!-- Contenu principal -->
-<main class="container my-5">
+<main class="container-fluid meetings-container my-4">
 
   <!-- En-tête avec titre et actions -->
   <div class="page-header mb-4">
@@ -131,11 +64,11 @@
           <small>Tickets nationaux à aborder lors des prochaines réunions</small>
         </p>
       </div>
-      <div class="col-auto">
+      <div class="col-auto no-print">
         <button class="btn btn-outline-secondary me-2" onclick="window.print()">
           <i class="bi bi-printer me-1"></i> Imprimer
         </button>
-        <button class="btn btn-primary" id="btn-export-pdf">
+        <button class="btn btn-primary" id="btn-export-pdf" onclick="window.print()">
           <i class="bi bi-file-earmark-pdf me-1"></i> Exporter PDF
         </button>
       </div>
@@ -166,7 +99,7 @@
         </select>
       </div>
 
-      <div class="col-12 col-lg-6">
+      <div class="col-12 col-lg-6 d-flex align-items-end">
         <button class="btn btn-sm btn-outline-secondary" id="btn-reset-filters">
           <i class="bi bi-x-circle me-1"></i> Réinitialiser les filtres
         </button>
@@ -177,7 +110,7 @@
   <!-- Statistiques rapides -->
   <div class="row g-3 mb-4">
     <div class="col-md-3 col-sm-6">
-      <div class="card bg-primary bg-opacity-10 border-0">
+      <div class="card stat-card bg-primary bg-opacity-10 border-0">
         <div class="card-body">
           <div class="d-flex align-items-center">
             <div class="flex-shrink-0">
@@ -192,7 +125,7 @@
       </div>
     </div>
     <div class="col-md-3 col-sm-6">
-      <div class="card bg-warning bg-opacity-10 border-0">
+      <div class="card stat-card bg-warning bg-opacity-10 border-0">
         <div class="card-body">
           <div class="d-flex align-items-center">
             <div class="flex-shrink-0">
@@ -207,7 +140,7 @@
       </div>
     </div>
     <div class="col-md-3 col-sm-6">
-      <div class="card bg-success bg-opacity-10 border-0">
+      <div class="card stat-card bg-success bg-opacity-10 border-0">
         <div class="card-body">
           <div class="d-flex align-items-center">
             <div class="flex-shrink-0">
@@ -222,7 +155,7 @@
       </div>
     </div>
     <div class="col-md-3 col-sm-6">
-      <div class="card bg-danger bg-opacity-10 border-0">
+      <div class="card stat-card bg-danger bg-opacity-10 border-0">
         <div class="card-body">
           <div class="d-flex align-items-center">
             <div class="flex-shrink-0">
@@ -252,14 +185,14 @@
       <table class="table table-hover table-meetings align-middle">
         <thead>
           <tr>
-            <th scope="col" style="width: 80px;">ID</th>
+            <th scope="col" style="width: 90px;">ID</th>
             <th scope="col">Titre</th>
             <th scope="col">Demandeur</th>
             <th scope="col">Catégorie</th>
             <th scope="col">Priorité</th>
             <th scope="col">Statut</th>
             <th scope="col">Statut Réunion</th>
-            <th scope="col" class="no-print" style="width: 150px;">Actions</th>
+            <th scope="col" class="no-print" style="width: 170px;">Actions</th>
           </tr>
         </thead>
         <tbody id="meetings-table-body">
@@ -275,7 +208,7 @@
       <i class="bi bi-calendar-x"></i>
     </div>
     <h5 class="mt-3">Aucun ticket national pour le moment</h5>
-    <p class="text-muted mb-4">Les tickets marqués comme "nationaux" apparaîtront ici pour préparation des réunions.</p>
+    <p class="text-muted mb-4">Les tickets marqués comme "nationaux" apparaîtront ici pour la préparation des réunions.</p>
     <a href="tickets.html" class="btn btn-primary">
       <i class="bi bi-arrow-left me-1"></i> Voir tous les tickets
     </a>
@@ -317,7 +250,8 @@
         </div>
         <div class="mb-3">
           <label for="meeting-notes-textarea" class="form-label">Notes / Décisions prises</label>
-          <textarea class="form-control" id="meeting-notes-textarea" rows="8" placeholder="Saisissez les notes, décisions ou actions à prendre pour ce ticket..."></textarea>
+          <textarea class="form-control" id="meeting-notes-textarea" rows="8"
+                    placeholder="Saisissez les notes, décisions ou actions à prendre pour ce ticket..."></textarea>
         </div>
         <div class="mb-3">
           <label for="meeting-status-select" class="form-label">Statut pour la prochaine réunion</label>

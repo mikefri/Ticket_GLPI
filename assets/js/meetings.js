@@ -1,9 +1,10 @@
 /**
  * ============================================================
  *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
- *  + Colonne Description (remplace Demandeur)
- *  + Remontées Mi Digital (horodatage + historique)
+ *  + Colonne Description
+ *  + Remontées Mi Digital (horodatage + historique + suppression admin)
  *  + Export Excel (SheetJS)
+ *  + Extraction du n° de ticket groom
  * ============================================================
  */
 
@@ -37,8 +38,11 @@ const MEETING_STATUS = {
 };
 
 let allTickets = [];
-let currentTicketId = null;
 let unsubscribe = null;
+
+// Etat de la modal Mi Digital
+let currentMiTicketId = null;
+let currentMiSorted = [];
 
 const filters = { meetingStatus: '', priority: '' };
 
@@ -60,15 +64,10 @@ const DOM = {
   statPending:      $('stat-pending'),
   statTreated:      $('stat-treated'),
   statPostponed:    $('stat-postponed'),
-  modalElement:     $('meetingNotesModal'),
-  modalTitle:       $('modal-ticket-title'),
-  modalInfo:        $('modal-ticket-info'),
-  modalNotes:       $('meeting-notes-textarea'),
-  modalStatus:      $('meeting-status-select'),
-  btnSaveNotes:     $('btn-save-meeting-notes'),
   miModal:          $('miDigitalModal'),
   miModalTitle:     $('mi-modal-title'),
   miModalList:      $('mi-modal-list'),
+  btnClearMi:       $('btn-clear-mi-history'),
   toastElement:     $('toast'),
   toastBody:        $('toast-body')
 };
@@ -85,9 +84,23 @@ function bindEvents() {
   DOM.filterStatus.addEventListener('change', onFilterChange);
   DOM.filterPriority.addEventListener('change', onFilterChange);
   DOM.btnResetFilters.addEventListener('click', resetFilters);
-  DOM.btnSaveNotes.addEventListener('click', saveMeetingNotes);
   DOM.btnExportExcel.addEventListener('click', exportToExcel);
   DOM.tableBody.addEventListener('click', onTableAction);
+
+  // Suppression d'une entrée Mi Digital (délégation dans la modal)
+  DOM.miModalList.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-del-idx]');
+    if (!btn) return;
+    deleteMiEntry(parseInt(btn.dataset.delIdx, 10));
+  });
+
+  // Vider tout l'historique (admin)
+  DOM.btnClearMi?.addEventListener('click', clearMiHistory);
+}
+
+// Rôle admin (défini par app.js)
+function isAdminUser() {
+  return window.__isAdmin === true;
 }
 
 // ------------------------------------------------------------
@@ -159,10 +172,6 @@ function buildRow(ticket) {
       <td>${groomCell(ticket.groomLink)}</td>
       <td class="no-print">
         <div class="btn-action-group">
-          <button class="btn btn-outline-primary" data-action="notes" data-id="${id}"
-                  title="Notes de réunion" data-bs-toggle="tooltip">
-            <i class="bi bi-journal-text"></i>
-          </button>
           <button class="btn btn-outline-info" data-action="midigital" data-id="${id}"
                   title="Remontée Mi Digital (ajouter une date)" data-bs-toggle="tooltip">
             <i class="bi bi-megaphone"></i>
@@ -194,7 +203,6 @@ function onTableAction(event) {
   const { action, id } = button.dataset;
 
   switch (action) {
-    case 'notes':     openNotesModal(id);     break;
     case 'treated':   markAsTreated(id);      break;
     case 'unflag':    unflagNational(id);     break;
     case 'midigital': recordMiDigital(id);    break;
@@ -226,7 +234,7 @@ async function unflagNational(id) {
 }
 
 // ------------------------------------------------------------
-// 8. REMONTÉES MI DIGITAL (horodatage + historique)
+// 8. REMONTÉES MI DIGITAL (ajout + historique + suppression admin)
 // ------------------------------------------------------------
 async function recordMiDigital(id) {
   if (!confirm('Enregistrer une remontée Mi Digital pour ce ticket ?\nUne date horodatée sera ajoutée à l\'historique.')) return;
@@ -256,10 +264,24 @@ function openMiDigitalModal(id) {
   const ticket = allTickets.find((t) => t.id === id);
   if (!ticket) return;
 
+  currentMiTicketId = id;
   DOM.miModalTitle.textContent = getField(ticket, 'title') || 'Sans titre';
 
-  const dates = Array.isArray(ticket.miDigitalDates) ? [...ticket.miDigitalDates] : [];
+  renderMiModalList();
+
+  // Le bouton "Vider l'historique" n'est visible que pour les admins
+  DOM.btnClearMi?.classList.toggle('d-none', !isAdminUser());
+
+  bootstrap.Modal.getOrCreateInstance(DOM.miModal).show();
+}
+
+function renderMiModalList() {
+  const ticket = allTickets.find((t) => t.id === currentMiTicketId);
+  const dates = ticket && Array.isArray(ticket.miDigitalDates) ? [...ticket.miDigitalDates] : [];
   dates.sort((a, b) => toDate(b.at) - toDate(a.at));
+  currentMiSorted = dates;
+
+  const admin = isAdminUser();
 
   if (!dates.length) {
     DOM.miModalList.innerHTML = `
@@ -267,21 +289,86 @@ function openMiDigitalModal(id) {
         <i class="bi bi-megaphone fs-3 d-block mb-2"></i>
         Aucune remontée Mi Digital enregistrée.
       </div>`;
-  } else {
-    DOM.miModalList.innerHTML = dates.map((d, i) => `
-      <div class="list-group-item d-flex justify-content-between align-items-center">
-        <span>
-          <i class="bi bi-megaphone-fill me-2 text-info"></i>
-          <strong>${formatDateTime(d.at)}</strong>
-        </span>
+    DOM.btnClearMi?.classList.add('d-none');
+    return;
+  }
+
+  DOM.miModalList.innerHTML = dates.map((d, i) => `
+    <div class="list-group-item d-flex justify-content-between align-items-center">
+      <span>
+        <i class="bi bi-megaphone-fill me-2 text-info"></i>
+        <strong>${formatDateTime(d.at)}</strong>
+      </span>
+      <span class="d-flex align-items-center">
         <small class="text-muted">
           ${escapeHtml(d.by || '—')}
           ${i === 0 ? '<span class="badge bg-info text-dark ms-1">dernier</span>' : ''}
         </small>
-      </div>`).join('');
-  }
+        ${admin ? `
+          <button type="button" class="btn btn-sm btn-outline-danger ms-2"
+                  data-del-idx="${i}" title="Supprimer cette remontée">
+            <i class="bi bi-trash"></i>
+          </button>` : ''}
+      </span>
+    </div>`).join('');
+}
 
-  bootstrap.Modal.getOrCreateInstance(DOM.miModal).show();
+// Supprime UNE entrée de l'historique (admin uniquement)
+async function deleteMiEntry(idx) {
+  if (!isAdminUser()) return;
+
+  const ticket = allTickets.find((t) => t.id === currentMiTicketId);
+  if (!ticket || !Array.isArray(ticket.miDigitalDates)) return;
+
+  const entry = currentMiSorted[idx];
+  if (!entry) return;
+
+  if (!confirm('Supprimer cette remontée Mi Digital ?')) return;
+
+  // Retire exactement cette entrée (même référence d'objet)
+  const newArray = ticket.miDigitalDates.filter((e) => e !== entry);
+
+  try {
+    ticket.miDigitalDates = newArray;      // màj locale → re-rendu immédiat
+    renderMiModalList();
+
+    await updateDoc(doc(db, 'tickets', ticket.id), {
+      miDigitalDates: newArray,
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+
+    showToast('Remontée Mi Digital supprimée.', 'success');
+  } catch (error) {
+    console.error('[meetings] Erreur suppression entrée Mi Digital :', error);
+    showToast('Erreur lors de la suppression.', 'danger');
+  }
+}
+
+// Vide TOUT l'historique (admin uniquement)
+async function clearMiHistory() {
+  if (!isAdminUser()) return;
+
+  const ticket = allTickets.find((t) => t.id === currentMiTicketId);
+  if (!ticket) return;
+
+  if (!confirm('Vider TOUT l\'historique des remontées Mi Digital pour ce ticket ?\nCette action est irréversible.')) return;
+
+  try {
+    ticket.miDigitalDates = [];            // màj locale → re-rendu immédiat
+    renderMiModalList();
+
+    await updateDoc(doc(db, 'tickets', ticket.id), {
+      miDigitalDates: [],
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+
+    showToast('Historique Mi Digital vidé.', 'success');
+  } catch (error) {
+    console.error('[meetings] Erreur vidage historique Mi Digital :', error);
+    showToast('Erreur lors du vidage de l’historique.', 'danger');
+  }
 }
 
 function miDigitalCell(ticket) {
@@ -395,57 +482,7 @@ async function exportToExcel() {
 }
 
 // ------------------------------------------------------------
-// 10. MODAL — NOTES DE RÉUNION
-// ------------------------------------------------------------
-function openNotesModal(id) {
-  const ticket = allTickets.find((t) => t.id === id);
-  if (!ticket) return;
-
-  currentTicketId = id;
-
-  DOM.modalTitle.textContent = getField(ticket, 'title') || 'Sans titre';
-  DOM.modalInfo.textContent  =
-    `Ticket #${getField(ticket, 'ticketNumber') || id.substring(0, 6)} • ` +
-    `Créé le ${formatDate(getField(ticket, 'createdAt'))}`;
-  DOM.modalNotes.value       = ticket.meetingNotes || '';
-  DOM.modalStatus.value      = ticket.meetingStatus || 'pending';
-
-  getModal().show();
-}
-
-async function saveMeetingNotes() {
-  if (!currentTicketId) return;
-
-  setSaveButtonLoading(true);
-
-  try {
-    await updateDoc(doc(db, 'tickets', currentTicketId), {
-      meetingNotes:  DOM.modalNotes.value.trim(),
-      meetingStatus: DOM.modalStatus.value,
-      meetingUpdatedAt: serverTimestamp(),
-      meetingUpdatedBy: auth.currentUser?.uid || null
-    });
-
-    showToast('Notes de réunion enregistrées.', 'success');
-    getModal().hide();
-  } catch (error) {
-    console.error('[meetings] Erreur sauvegarde notes :', error);
-    showToast('Erreur lors de l’enregistrement des notes.', 'danger');
-  } finally {
-    setSaveButtonLoading(false);
-    currentTicketId = null;
-  }
-}
-
-function setSaveButtonLoading(loading) {
-  DOM.btnSaveNotes.disabled = loading;
-  DOM.btnSaveNotes.innerHTML = loading
-    ? '<span class="spinner-border spinner-border-sm me-1"></span>Enregistrement…'
-    : '<i class="bi bi-save me-1"></i> Enregistrer';
-}
-
-// ------------------------------------------------------------
-// 11. MISE À JOUR GÉNÉRIQUE FIRESTORE
+// 10. MISE À JOUR GÉNÉRIQUE FIRESTORE
 // ------------------------------------------------------------
 async function updateMeetingFields(id, fields, successMessage) {
   try {
@@ -462,7 +499,7 @@ async function updateMeetingFields(id, fields, successMessage) {
 }
 
 // ------------------------------------------------------------
-// 12. FILTRES
+// 11. FILTRES
 // ------------------------------------------------------------
 function onFilterChange() {
   filters.meetingStatus = DOM.filterStatus.value;
@@ -488,7 +525,7 @@ function applyFilters(tickets) {
 }
 
 // ------------------------------------------------------------
-// 13. STATISTIQUES
+// 12. STATISTIQUES
 // ------------------------------------------------------------
 function refreshStats() {
   const count = (status) =>
@@ -522,7 +559,7 @@ function animateCounter(element, target) {
 }
 
 // ------------------------------------------------------------
-// 14. UTILITAIRES
+// 13. UTILITAIRES
 // ------------------------------------------------------------
 function getField(ticket, key) {
   const aliases = FIELD_MAP[key] || [key];
@@ -608,10 +645,6 @@ function groomCell(link) {
     </a>`;
 }
 
-function getModal() {
-  return bootstrap.Modal.getOrCreateInstance(DOM.modalElement);
-}
-
 function initTooltips() {
   if (!window.bootstrap?.Tooltip) return;
   DOM.tableBody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
@@ -632,7 +665,7 @@ function showToast(message, type = 'info') {
 }
 
 // ------------------------------------------------------------
-// 15. NETTOYAGE
+// 14. NETTOYAGE
 // ------------------------------------------------------------
 window.addEventListener('beforeunload', () => {
   if (unsubscribe) unsubscribe();

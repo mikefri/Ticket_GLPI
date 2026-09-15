@@ -451,3 +451,24 @@
   border-left: none;
   border-right: none;
 }
+
+
+/* ============================================
+   COLONNE DESCRIPTION (remplace Demandeur)
+   ============================================ */
+.table-meetings th:nth-child(3),
+.table-meetings td:nth-child(3) {
+  white-space: normal;
+  min-width: 320px;
+  max-width: 520px;
+}
+
+.desc-cell {
+  font-size: 0.85rem;
+  color: #495057;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;          /* 2 lignes max */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.45;
+}

@@ -63,7 +63,6 @@ const DOM = {
   statTotal:        $('stat-total'),
   statPending:      $('stat-pending'),
   statTreated:      $('stat-treated'),
-  statPostponed:    $('stat-postponed'),
   miModal:          $('miDigitalModal'),
   miModalTitle:     $('mi-modal-title'),
   miModalList:      $('mi-modal-list'),
@@ -525,16 +524,15 @@ function applyFilters(tickets) {
 }
 
 // ------------------------------------------------------------
-// 12. STATISTIQUES
+// 12. STATISTIQUES (3 compteurs)
 // ------------------------------------------------------------
 function refreshStats() {
   const count = (status) =>
     allTickets.filter((t) => (t.meetingStatus || 'pending') === status).length;
 
-  animateCounter(DOM.statTotal,     allTickets.length);
-  animateCounter(DOM.statPending,   count('pending'));
-  animateCounter(DOM.statTreated,   count('treated'));
-  animateCounter(DOM.statPostponed, count('postponed'));
+  animateCounter(DOM.statTotal,   allTickets.length);
+  animateCounter(DOM.statPending, count('pending'));
+  animateCounter(DOM.statTreated, count('treated'));
 }
 
 function animateCounter(element, target) {

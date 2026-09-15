@@ -226,47 +226,7 @@
   </div>
 </div>
 
-<!-- Modal pour notes de réunion -->
-<div class="modal fade" id="meetingNotesModal" tabindex="-1" aria-labelledby="meetingNotesModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="meetingNotesModalLabel">
-          <i class="bi bi-journal-text me-2"></i>
-          Notes de réunion
-        </h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <h6 id="modal-ticket-title"></h6>
-          <small class="text-muted" id="modal-ticket-info"></small>
-        </div>
-        <div class="mb-3">
-          <label for="meeting-notes-textarea" class="form-label">Notes / Décisions prises</label>
-          <textarea class="form-control" id="meeting-notes-textarea" rows="8"
-                    placeholder="Saisissez les notes, décisions ou actions à prendre pour ce ticket..."></textarea>
-        </div>
-        <div class="mb-3">
-          <label for="meeting-status-select" class="form-label">Statut pour la prochaine réunion</label>
-          <select class="form-select" id="meeting-status-select">
-            <option value="pending">À traiter (reste dans la liste)</option>
-            <option value="treated">Traité (archivé)</option>
-            <option value="postponed">Reporté à la prochaine réunion</option>
-          </select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Annuler</button>
-        <button type="button" class="btn btn-primary" id="btn-save-meeting-notes">
-          <i class="bi bi-save me-1"></i> Enregistrer
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-  <!-- Modal historique des remontées Mi Digital -->
+<!-- Modal historique des remontées Mi Digital -->
 <div class="modal fade" id="miDigitalModal" tabindex="-1" aria-labelledby="miDigitalModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-scrollable">
     <div class="modal-content">
@@ -282,6 +242,10 @@
         <div id="mi-modal-list" class="list-group mt-3"></div>
       </div>
       <div class="modal-footer">
+        <!-- Visible uniquement pour les admins -->
+        <button type="button" class="btn btn-outline-danger me-auto d-none" id="btn-clear-mi-history">
+          <i class="bi bi-trash-fill me-1"></i> Vider l'historique
+        </button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
       </div>
     </div>

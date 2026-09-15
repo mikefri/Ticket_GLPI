@@ -387,3 +387,67 @@
     border: 1px solid #dee2e6;
   }
 }
+
+
+/* ============================================
+   ALIGNEMENT BOUTONS D'ACTIONS (une seule ligne)
+   ============================================ */
+.table-meetings th:last-child {
+  width: 240px;
+}
+
+.btn-action-group {
+  flex-wrap: nowrap;
+}
+
+/* ============================================
+   REMONTÉES MI DIGITAL
+   ============================================ */
+.badge-midigital {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  background: rgba(13, 202, 240, .12);
+  color: #087990;
+  border: 1px solid rgba(13, 202, 240, .4);
+  padding: .3rem .6rem;
+  border-radius: 50px;
+  font-size: .75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .2s ease, color .2s ease;
+}
+
+.badge-midigital:hover {
+  background: #0dcaf0;
+  color: #ffffff;
+}
+
+.badge-midigital .mi-last {
+  font-weight: 500;
+  opacity: .8;
+}
+
+/* Modal historique Mi Digital */
+#miDigitalModal .modal-content {
+  border-radius: 12px;
+  border: none;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+#miDigitalModal .modal-header {
+  background: linear-gradient(135deg, #0dcaf0 0%, #20c997 100%);
+  color: #ffffff;
+  border-radius: 12px 12px 0 0;
+  padding: 1rem 1.5rem;
+}
+
+#miDigitalModal .modal-header .btn-close {
+  filter: brightness(0) invert(1);
+}
+
+#miDigitalModal .list-group-item {
+  border-left: none;
+  border-right: none;
+}

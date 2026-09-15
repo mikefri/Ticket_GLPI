@@ -2,6 +2,7 @@
  * ============================================================
  *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
  *  + Remontées Mi Digital (horodatage + historique)
+ *  + Export Excel (SheetJS)
  * ============================================================
  */
 
@@ -52,7 +53,7 @@ const DOM = {
   filterStatus:     $('filter-meeting-status'),
   filterPriority:   $('filter-priority'),
   btnResetFilters:  $('btn-reset-filters'),
-  btnExportPdf:     $('btn-export-pdf'),
+  btnExportExcel:   $('btn-export-excel'),
   statTotal:        $('stat-total'),
   statPending:      $('stat-pending'),
   statTreated:      $('stat-treated'),
@@ -83,6 +84,7 @@ function bindEvents() {
   DOM.filterPriority.addEventListener('change', onFilterChange);
   DOM.btnResetFilters.addEventListener('click', resetFilters);
   DOM.btnSaveNotes.addEventListener('click', saveMeetingNotes);
+  DOM.btnExportExcel.addEventListener('click', exportToExcel);
   DOM.tableBody.addEventListener('click', onTableAction);
 }
 
@@ -193,10 +195,10 @@ function onTableAction(event) {
   const { action, id } = button.dataset;
 
   switch (action) {
-    case 'notes':     openNotesModal(id);    break;
-    case 'treated':   markAsTreated(id);     break;
-    case 'unflag':    unflagNational(id);    break;
-    case 'midigital': recordMiDigital(id);   break;
+    case 'notes':     openNotesModal(id);     break;
+    case 'treated':   markAsTreated(id);      break;
+    case 'unflag':    unflagNational(id);     break;
+    case 'midigital': recordMiDigital(id);    break;
     case 'mihistory': openMiDigitalModal(id); break;
   }
 }
@@ -258,7 +260,7 @@ function openMiDigitalModal(id) {
   DOM.miModalTitle.textContent = getField(ticket, 'title') || 'Sans titre';
 
   const dates = Array.isArray(ticket.miDigitalDates) ? [...ticket.miDigitalDates] : [];
-  dates.sort((a, b) => toDate(b.at) - toDate(a.at));   // plus récent d'abord
+  dates.sort((a, b) => toDate(b.at) - toDate(a.at));
 
   if (!dates.length) {
     DOM.miModalList.innerHTML = `
@@ -297,7 +299,103 @@ function miDigitalCell(ticket) {
 }
 
 // ------------------------------------------------------------
-// 9. MODAL — NOTES DE RÉUNION
+// 9. EXPORT EXCEL (SheetJS)
+// ------------------------------------------------------------
+function loadSheetJs() {
+  return new Promise((resolve, reject) => {
+    if (window.XLSX) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+function lastMiDate(ticket) {
+  const dates = Array.isArray(ticket.miDigitalDates) ? ticket.miDigitalDates : [];
+  if (!dates.length) return '';
+  const sorted = [...dates].sort((a, b) => toDate(b.at) - toDate(a.at));
+  return formatDateTime(sorted[0].at);
+}
+
+async function exportToExcel() {
+  const tickets = applyFilters(allTickets);   // exporte ce qui est affiché (filtres appliqués)
+
+  if (!tickets.length) {
+    showToast('Aucun ticket à exporter.', 'warning');
+    return;
+  }
+
+  const btn = DOM.btnExportExcel;
+  const btnHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Génération…';
+
+  try {
+    await loadSheetJs();
+    const XLSX = window.XLSX;
+
+    // ── Feuille 1 : les tickets ──
+    const rows = tickets.map((t) => ({
+      'ID': getField(t, 'ticketNumber') || t.id,
+      'Titre': getField(t, 'title') || '',
+      'Demandeur': getField(t, 'requester') || '',
+      'Catégorie': getField(t, 'category') || '',
+      'Priorité': getField(t, 'priority') || '',
+      'Statut': getField(t, 'status') || '',
+      'Statut réunion': (MEETING_STATUS[t.meetingStatus] || MEETING_STATUS.pending).label,
+      'Nb remontées Mi Digital': Array.isArray(t.miDigitalDates) ? t.miDigitalDates.length : 0,
+      'Dernière remontée Mi Digital': lastMiDate(t),
+      'N° ticket groom': extractGroomNumber(t.groomLink) || '',
+      'Lien groom': t.groomLink || '',
+      'Notes de réunion': t.meetingNotes || '',
+      'Créé le': formatDateTime(getField(t, 'createdAt'))
+    }));
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+      { wch: 10 }, { wch: 45 }, { wch: 20 }, { wch: 12 }, { wch: 10 },
+      { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 24 }, { wch: 14 },
+      { wch: 45 }, { wch: 50 }, { wch: 20 }
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, 'Tickets nationaux');
+
+    // ── Feuille 2 : historique des remontées Mi Digital ──
+    const histRows = [];
+    tickets.forEach((t) => {
+      (Array.isArray(t.miDigitalDates) ? t.miDigitalDates : []).forEach((d) => {
+        histRows.push({
+          'ID': getField(t, 'ticketNumber') || t.id,
+          'Titre': getField(t, 'title') || '',
+          'Date de remontée': formatDateTime(d.at),
+          'Par': d.by || ''
+        });
+      });
+    });
+
+    if (histRows.length) {
+      const ws2 = XLSX.utils.json_to_sheet(histRows);
+      ws2['!cols'] = [{ wch: 10 }, { wch: 45 }, { wch: 24 }, { wch: 25 }];
+      XLSX.utils.book_append_sheet(wb, ws2, 'Historique MiDigital');
+    }
+
+    const dateStr = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `reunion-tickets-nationaux-${dateStr}.xlsx`);
+
+    showToast('Export Excel généré avec succès.', 'success');
+  } catch (error) {
+    console.error('[meetings] Erreur export Excel :', error);
+    showToast('Erreur lors de l’export Excel.', 'danger');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = btnHtml;
+  }
+}
+
+// ------------------------------------------------------------
+// 10. MODAL — NOTES DE RÉUNION
 // ------------------------------------------------------------
 function openNotesModal(id) {
   const ticket = allTickets.find((t) => t.id === id);
@@ -347,7 +445,7 @@ function setSaveButtonLoading(loading) {
 }
 
 // ------------------------------------------------------------
-// 10. MISE À JOUR GÉNÉRIQUE FIRESTORE
+// 11. MISE À JOUR GÉNÉRIQUE FIRESTORE
 // ------------------------------------------------------------
 async function updateMeetingFields(id, fields, successMessage) {
   try {
@@ -364,7 +462,7 @@ async function updateMeetingFields(id, fields, successMessage) {
 }
 
 // ------------------------------------------------------------
-// 11. FILTRES
+// 12. FILTRES
 // ------------------------------------------------------------
 function onFilterChange() {
   filters.meetingStatus = DOM.filterStatus.value;
@@ -390,7 +488,7 @@ function applyFilters(tickets) {
 }
 
 // ------------------------------------------------------------
-// 12. STATISTIQUES
+// 13. STATISTIQUES
 // ------------------------------------------------------------
 function refreshStats() {
   const count = (status) =>
@@ -424,7 +522,7 @@ function animateCounter(element, target) {
 }
 
 // ------------------------------------------------------------
-// 13. UTILITAIRES
+// 14. UTILITAIRES
 // ------------------------------------------------------------
 function getField(ticket, key) {
   const aliases = FIELD_MAP[key] || [key];
@@ -528,7 +626,7 @@ function showToast(message, type = 'info') {
 }
 
 // ------------------------------------------------------------
-// 14. NETTOYAGE
+// 15. NETTOYAGE
 // ------------------------------------------------------------
 window.addEventListener('beforeunload', () => {
   if (unsubscribe) unsubscribe();

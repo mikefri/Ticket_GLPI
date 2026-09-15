@@ -1,6 +1,7 @@
 /**
  * ============================================================
  *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
+ *  + Colonne Description (remplace Demandeur)
  *  + Remontées Mi Digital (horodatage + historique)
  *  + Export Excel (SheetJS)
  * ============================================================
@@ -25,7 +26,8 @@ const FIELD_MAP = {
   priority:     ['priority', 'priorite'],
   status:       ['status', 'statut'],
   ticketNumber: ['ticketNumber', 'number', 'numero'],
-  createdAt:    ['createdAt', 'dateCreation', 'created_at']
+  createdAt:    ['createdAt', 'dateCreation', 'created_at'],
+  description:  ['description', 'desc', 'details']
 };
 
 const MEETING_STATUS = {
@@ -129,11 +131,11 @@ function buildRow(ticket) {
   const id          = ticket.id;
   const number      = getField(ticket, 'ticketNumber') || id.substring(0, 6).toUpperCase();
   const title       = getField(ticket, 'title') || 'Sans titre';
-  const requester   = getField(ticket, 'requester') || 'Utilisateur';
   const category    = getField(ticket, 'category') || 'Autre';
   const priority    = getField(ticket, 'priority') || 'Moyenne';
   const status      = getField(ticket, 'status') || 'Ouvert';
   const meetStatus  = ticket.meetingStatus || 'pending';
+  const description = getField(ticket, 'description') || 'Aucune description';
 
   return `
     <tr class="fade-in" data-id="${id}">
@@ -145,11 +147,8 @@ function buildRow(ticket) {
         </div>
       </td>
       <td>
-        <div class="d-flex align-items-center">
-          <div class="avatar-circle me-2" style="width:28px;height:28px;font-size:.7rem;">
-            ${initials(requester)}
-          </div>
-          <span>${escapeHtml(requester)}</span>
+        <div class="desc-cell" title="${escapeHtml(description)}">
+          ${escapeHtml(truncate(description, 160))}
         </div>
       </td>
       <td><span class="badge bg-light text-dark border">${escapeHtml(category)}</span></td>
@@ -340,6 +339,7 @@ async function exportToExcel() {
     const rows = tickets.map((t) => ({
       'ID': getField(t, 'ticketNumber') || t.id,
       'Titre': getField(t, 'title') || '',
+      'Description': truncate(getField(t, 'description') || '', 500),
       'Demandeur': getField(t, 'requester') || '',
       'Catégorie': getField(t, 'category') || '',
       'Priorité': getField(t, 'priority') || '',
@@ -356,9 +356,9 @@ async function exportToExcel() {
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(rows);
     ws['!cols'] = [
-      { wch: 10 }, { wch: 45 }, { wch: 20 }, { wch: 12 }, { wch: 10 },
-      { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 24 }, { wch: 14 },
-      { wch: 45 }, { wch: 50 }, { wch: 20 }
+      { wch: 10 }, { wch: 40 }, { wch: 60 }, { wch: 18 }, { wch: 12 },
+      { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 24 },
+      { wch: 14 }, { wch: 45 }, { wch: 50 }, { wch: 20 }
     ];
     XLSX.utils.book_append_sheet(wb, ws, 'Tickets nationaux');
 
@@ -532,6 +532,12 @@ function getField(ticket, key) {
     }
   }
   return null;
+}
+
+function truncate(text, max) {
+  if (!text) return '';
+  const clean = String(text).replace(/\s+/g, ' ').trim();
+  return clean.length > max ? clean.slice(0, max).trimEnd() + '…' : clean;
 }
 
 function toDate(value) {

@@ -1,15 +1,17 @@
 /**
  * ============================================================
  *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
+ *  + Remontées Mi Digital (horodatage + historique)
  * ============================================================
  */
 
 // ------------------------------------------------------------
-// 1. IMPORTS FIREBASE (SDK 10.7.1 — même version que firebase-init.js)
+// 1. IMPORTS FIREBASE (SDK 10.7.1)
 // ------------------------------------------------------------
 import { db, auth } from './firebase-init.js';
 import {
-  collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp
+  collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp,
+  arrayUnion, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 // ------------------------------------------------------------
@@ -61,6 +63,9 @@ const DOM = {
   modalNotes:       $('meeting-notes-textarea'),
   modalStatus:      $('meeting-status-select'),
   btnSaveNotes:     $('btn-save-meeting-notes'),
+  miModal:          $('miDigitalModal'),
+  miModalTitle:     $('mi-modal-title'),
+  miModalList:      $('mi-modal-list'),
   toastElement:     $('toast'),
   toastBody:        $('toast-body')
 };
@@ -149,12 +154,17 @@ function buildRow(ticket) {
       <td>${priorityBadge(priority)}</td>
       <td><span class="badge bg-primary">${escapeHtml(status)}</span></td>
       <td>${meetingBadge(meetStatus)}</td>
+      <td>${miDigitalCell(ticket)}</td>
       <td>${groomCell(ticket.groomLink)}</td>
       <td class="no-print">
         <div class="btn-action-group">
           <button class="btn btn-outline-primary" data-action="notes" data-id="${id}"
                   title="Notes de réunion" data-bs-toggle="tooltip">
             <i class="bi bi-journal-text"></i>
+          </button>
+          <button class="btn btn-outline-info" data-action="midigital" data-id="${id}"
+                  title="Remontée Mi Digital (ajouter une date)" data-bs-toggle="tooltip">
+            <i class="bi bi-megaphone"></i>
           </button>
           <button class="btn btn-outline-success" data-action="treated" data-id="${id}"
                   title="Marquer comme traité" data-bs-toggle="tooltip">
@@ -183,9 +193,11 @@ function onTableAction(event) {
   const { action, id } = button.dataset;
 
   switch (action) {
-    case 'notes':   openNotesModal(id); break;
-    case 'treated': markAsTreated(id);  break;
-    case 'unflag':  unflagNational(id); break;
+    case 'notes':     openNotesModal(id);    break;
+    case 'treated':   markAsTreated(id);     break;
+    case 'unflag':    unflagNational(id);    break;
+    case 'midigital': recordMiDigital(id);   break;
+    case 'mihistory': openMiDigitalModal(id); break;
   }
 }
 
@@ -213,7 +225,79 @@ async function unflagNational(id) {
 }
 
 // ------------------------------------------------------------
-// 8. MODAL — NOTES DE RÉUNION
+// 8. REMONTÉES MI DIGITAL (horodatage + historique)
+// ------------------------------------------------------------
+async function recordMiDigital(id) {
+  if (!confirm('Enregistrer une remontée Mi Digital pour ce ticket ?\nUne date horodatée sera ajoutée à l\'historique.')) return;
+
+  try {
+    const entry = {
+      at: Timestamp.now(),
+      by: auth.currentUser?.displayName || auth.currentUser?.email || 'Inconnu'
+    };
+
+    await updateDoc(doc(db, 'tickets', id), {
+      miDigitalDates: arrayUnion(entry),
+      meetingUpdatedAt: serverTimestamp(),
+      meetingUpdatedBy: auth.currentUser?.uid || null
+    });
+
+    const ticket = allTickets.find((t) => t.id === id);
+    const count = (Array.isArray(ticket?.miDigitalDates) ? ticket.miDigitalDates.length : 0) + 1;
+    showToast(`Remontée Mi Digital enregistrée (${count}ᵉ date de l'historique).`, 'success');
+  } catch (error) {
+    console.error('[meetings] Erreur remontée Mi Digital :', error);
+    showToast('Erreur lors de l’enregistrement de la remontée.', 'danger');
+  }
+}
+
+function openMiDigitalModal(id) {
+  const ticket = allTickets.find((t) => t.id === id);
+  if (!ticket) return;
+
+  DOM.miModalTitle.textContent = getField(ticket, 'title') || 'Sans titre';
+
+  const dates = Array.isArray(ticket.miDigitalDates) ? [...ticket.miDigitalDates] : [];
+  dates.sort((a, b) => toDate(b.at) - toDate(a.at));   // plus récent d'abord
+
+  if (!dates.length) {
+    DOM.miModalList.innerHTML = `
+      <div class="text-muted text-center py-3">
+        <i class="bi bi-megaphone fs-3 d-block mb-2"></i>
+        Aucune remontée Mi Digital enregistrée.
+      </div>`;
+  } else {
+    DOM.miModalList.innerHTML = dates.map((d, i) => `
+      <div class="list-group-item d-flex justify-content-between align-items-center">
+        <span>
+          <i class="bi bi-megaphone-fill me-2 text-info"></i>
+          <strong>${formatDateTime(d.at)}</strong>
+        </span>
+        <small class="text-muted">
+          ${escapeHtml(d.by || '—')}
+          ${i === 0 ? '<span class="badge bg-info text-dark ms-1">dernier</span>' : ''}
+        </small>
+      </div>`).join('');
+  }
+
+  bootstrap.Modal.getOrCreateInstance(DOM.miModal).show();
+}
+
+function miDigitalCell(ticket) {
+  const dates = Array.isArray(ticket.miDigitalDates) ? ticket.miDigitalDates : [];
+  if (!dates.length) return '<span class="text-muted">—</span>';
+
+  const sorted = [...dates].sort((a, b) => toDate(b.at) - toDate(a.at));
+  return `
+    <button type="button" class="badge-midigital" data-action="mihistory" data-id="${ticket.id}"
+            title="Voir l'historique des remontées Mi Digital">
+      <i class="bi bi-megaphone-fill"></i> ×${dates.length}
+      <span class="mi-last">${formatDate(sorted[0].at)}</span>
+    </button>`;
+}
+
+// ------------------------------------------------------------
+// 9. MODAL — NOTES DE RÉUNION
 // ------------------------------------------------------------
 function openNotesModal(id) {
   const ticket = allTickets.find((t) => t.id === id);
@@ -263,7 +347,7 @@ function setSaveButtonLoading(loading) {
 }
 
 // ------------------------------------------------------------
-// 9. MISE À JOUR GÉNÉRIQUE FIRESTORE
+// 10. MISE À JOUR GÉNÉRIQUE FIRESTORE
 // ------------------------------------------------------------
 async function updateMeetingFields(id, fields, successMessage) {
   try {
@@ -280,7 +364,7 @@ async function updateMeetingFields(id, fields, successMessage) {
 }
 
 // ------------------------------------------------------------
-// 10. FILTRES
+// 11. FILTRES
 // ------------------------------------------------------------
 function onFilterChange() {
   filters.meetingStatus = DOM.filterStatus.value;
@@ -306,7 +390,7 @@ function applyFilters(tickets) {
 }
 
 // ------------------------------------------------------------
-// 11. STATISTIQUES
+// 12. STATISTIQUES
 // ------------------------------------------------------------
 function refreshStats() {
   const count = (status) =>
@@ -340,7 +424,7 @@ function animateCounter(element, target) {
 }
 
 // ------------------------------------------------------------
-// 12. UTILITAIRES
+// 13. UTILITAIRES
 // ------------------------------------------------------------
 function getField(ticket, key) {
   const aliases = FIELD_MAP[key] || [key];
@@ -363,6 +447,14 @@ function formatDate(value) {
   if (!value) return 'N/A';
   return toDate(value).toLocaleDateString('fr-FR', {
     day: '2-digit', month: 'short', year: 'numeric'
+  });
+}
+
+function formatDateTime(value) {
+  if (!value) return 'N/A';
+  return toDate(value).toLocaleString('fr-FR', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit'
   });
 }
 
@@ -391,32 +483,20 @@ function meetingBadge(status) {
     </span>`;
 }
 
-// ============================================================
-//  EXTRACTION DU NUMÉRO DE TICKET GROOM
-//  Ex : https://groom.pmm.sncf.fr/demandes/187013/live → "187013"
-// ============================================================
 function extractGroomNumber(link) {
   if (!link) return null;
-
-  // Cas nominal : /demandes/XXXXX/live
   let m = link.match(/\/demandes\/(\d+)/i);
   if (m) return m[1];
-
-  // Repli : nombre de 4 chiffres et + dans le chemin de l'URL
   m = link.match(/\/(\d{4,})(?:[\/?#]|$)/);
   if (m) return m[1];
-
-  // Dernier repli : première suite de 4 chiffres et + dans l'URL
   m = link.match(/(\d{4,})/);
   return m ? m[1] : null;
 }
 
 function groomCell(link) {
   if (!link) return '<span class="text-muted">—</span>';
-
   const num = extractGroomNumber(link);
   const label = num ? '#' + num : 'Groom';
-
   return `
     <a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer"
        class="groom-link" title="Ouvrir le ticket groom : ${escapeHtml(link)}">
@@ -448,7 +528,7 @@ function showToast(message, type = 'info') {
 }
 
 // ------------------------------------------------------------
-// 13. NETTOYAGE
+// 14. NETTOYAGE
 // ------------------------------------------------------------
 window.addEventListener('beforeunload', () => {
   if (unsubscribe) unsubscribe();

@@ -1,8 +1,9 @@
 /**
  * ============================================================
  *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
- *  + Tri par priorité par défaut
- *  + Tri dynamique sur toutes les colonnes (flèches cliquables)
+ *  + Tri par priorité par défaut (Critique → Haute → Moyenne → Normal → Basse)
+ *  + Tri dynamique sur les colonnes (flèches cliquables)
+ *  + Règle anti-mélange : à égalité, le plus récent d'abord
  *  + Colonne Description
  *  + Remontées Mi Digital (horodatage + historique + suppression admin)
  *  + Export Excel (SheetJS)
@@ -39,22 +40,20 @@ const MEETING_STATUS = {
   postponed: { label: 'Reporté',   icon: 'bi-arrow-repeat' }
 };
 
-// ── Poids des priorités pour le tri (plus c'est haut, plus c'est prioritaire) ──
+// ── Rang de chaque libellé de priorité (chaque nom a SON propre score) ──
 const PRIORITY_WEIGHT = {
-  'Critique': 5,
-  'Urgent': 5,
-  'Haute': 4,
-  'Moyenne': 3,
-  'Normal': 3,
-  'Basse': 2,
-  'Faible': 2,
-  '': 1 // Valeur par défaut si aucune priorité n'est définie
+  'Critique': 6,
+  'Haute':    5,
+  'Moyenne':  4,
+  'Normal':   3,
+  'Basse':    2,
+  'Faible':   1
 };
 
-// ── État du tri dynamique ──
+// ── État du tri dynamique (flèches) ──
 const sortState = {
-  field: 'priority',       // Tri par défaut : priorité
-  direction: 'desc'        // 'desc' = décroissant (plus prioritaire en premier)
+  field: 'priority',   // tri par défaut : priorité
+  direction: 'desc'    // décroissant = les plus prioritaires en premier
 };
 
 let allTickets = [];
@@ -107,7 +106,7 @@ function bindEvents() {
   DOM.btnExportExcel.addEventListener('click', exportToExcel);
   DOM.tableBody.addEventListener('click', onTableAction);
 
-  // ── Tri dynamique : écoute des clics sur les en-têtes ──
+  // Tri dynamique : clics sur les en-têtes de colonnes
   if (DOM.tableHead) {
     DOM.tableHead.addEventListener('click', onHeaderClick);
   }
@@ -147,7 +146,7 @@ function subscribeNationalTickets() {
 }
 
 // ------------------------------------------------------------
-// 6. AFFICHAGE
+// 6. AFFICHAGE + TRI
 // ------------------------------------------------------------
 function renderTable() {
   const tickets = applySorting(applyFilters(allTickets));
@@ -161,11 +160,11 @@ function renderTable() {
   DOM.emptyState.classList.add('d-none');
   DOM.tableContainer.classList.remove('d-none');
   DOM.tableBody.innerHTML = tickets.map(buildRow).join('');
-  renderSortIcons();   // met à jour les flèches
+  renderSortIcons();   // met à jour les flèches dans les en-têtes
   initTooltips();
 }
 
-// ── Fonction de tri centralisée ──
+// ── Fonction de tri centralisée (colonnes cliquables) ──
 function applySorting(tickets) {
   const { field, direction } = sortState;
   const dir = direction === 'asc' ? 1 : -1;
@@ -175,7 +174,7 @@ function applySorting(tickets) {
 
     switch (field) {
       case 'id':
-        result = getField(a, 'ticketNumber').localeCompare(getField(b, 'ticketNumber') || '');
+        result = (getField(a, 'ticketNumber') || '').localeCompare(getField(b, 'ticketNumber') || '');
         break;
       case 'title':
         result = (getField(a, 'title') || '').localeCompare(getField(b, 'title') || '');
@@ -184,8 +183,8 @@ function applySorting(tickets) {
         result = (getField(a, 'category') || '').localeCompare(getField(b, 'category') || '');
         break;
       case 'priority': {
-        const pA = PRIORITY_WEIGHT[getField(a, 'priority')] || 1;
-        const pB = PRIORITY_WEIGHT[getField(b, 'priority')] || 1;
+        const pA = PRIORITY_WEIGHT[getField(a, 'priority')] ?? 0;
+        const pB = PRIORITY_WEIGHT[getField(b, 'priority')] ?? 0;
         result = pA - pB;
         break;
       }
@@ -195,24 +194,24 @@ function applySorting(tickets) {
       case 'meetStatus':
         result = (a.meetingStatus || '').localeCompare(b.meetingStatus || '');
         break;
-      case 'miDigital': {
-        const dA = getLastMiTimestamp(a);
-        const dB = getLastMiTimestamp(b);
-        result = dA - dB;
+      case 'miDigital':
+        result = getLastMiTimestamp(a) - getLastMiTimestamp(b);
         break;
-      }
       case 'createdAt':
         result = toDate(a.createdAt) - toDate(b.createdAt);
         break;
-      default:
-        result = 0;
+    }
+
+    // 🚫 RÈGLE ANTI-MÉLANGE : à égalité, toujours le plus récent d'abord
+    if (result === 0) {
+      return toDate(b.createdAt) - toDate(a.createdAt);
     }
 
     return result * dir;
   });
 }
 
-// ── Helper : récupère le timestamp de la dernière remontée Mi Digital ──
+// ── Helper : timestamp de la dernière remontée Mi Digital ──
 function getLastMiTimestamp(ticket) {
   const dates = Array.isArray(ticket?.miDigitalDates) ? ticket.miDigitalDates : [];
   if (!dates.length) return 0;
@@ -220,15 +219,15 @@ function getLastMiTimestamp(ticket) {
   return toDate(sorted[0].at).getTime();
 }
 
-// ── Gestion des clics sur les en-têtes ──
+// ── Clic sur un en-tête de colonne ──
 function onHeaderClick(event) {
   const th = event.target.closest('th[data-sort]');
   if (!th) return;
-  
+
   const field = th.dataset.sort;
   if (!field) return;
 
-  // Inverser la direction si on reclique sur la même colonne, sinon mettre 'desc'
+  // Même colonne → on inverse le sens ; nouvelle colonne → décroissant
   if (sortState.field === field) {
     sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
   } else {
@@ -239,26 +238,22 @@ function onHeaderClick(event) {
   renderTable();
 }
 
-// ── Met à jour les flèches visuelles dans les en-têtes ──
+// ── Dessine les flèches dans les en-têtes ──
 function renderSortIcons() {
   if (!DOM.tableHead) return;
-  
+
   DOM.tableHead.querySelectorAll('th[data-sort]').forEach((th) => {
-    // Supprime les anciennes icônes
     const oldIcon = th.querySelector('.sort-icon');
     if (oldIcon) oldIcon.remove();
 
-    // Crée la nouvelle icône
     const icon = document.createElement('i');
     icon.className = 'sort-icon ms-1';
 
     if (sortState.field === th.dataset.sort) {
-      // Colonne active
       icon.classList.add('bi', 'text-primary', 'fw-bold');
       icon.classList.add(sortState.direction === 'asc' ? 'bi-caret-up-fill' : 'bi-caret-down-fill');
       th.classList.add('sort-active');
     } else {
-      // Colonne inactive
       icon.classList.add('bi', 'bi-arrow-down-up', 'text-muted', 'opacity-50');
       th.classList.remove('sort-active');
     }
@@ -452,7 +447,6 @@ async function deleteMiEntry(idx) {
 
   if (!confirm('Supprimer cette remontée Mi Digital ?')) return;
 
-  // Retire exactement cette entrée (même référence d'objet)
   const newArray = ticket.miDigitalDates.filter((e) => e !== entry);
 
   try {
@@ -533,7 +527,7 @@ function lastMiDate(ticket) {
 }
 
 async function exportToExcel() {
-  // Exporte les tickets triés tels qu'ils sont affichés à l'écran
+  // Exporte exactement ce qui est affiché à l'écran (filtres + tri appliqués)
   const tickets = applySorting(applyFilters(allTickets));
 
   if (!tickets.length) {

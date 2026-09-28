@@ -472,3 +472,25 @@
   overflow: hidden;
   line-height: 1.45;
 }
+/* ── En-têtes triables ── */
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s ease;
+  position: relative;
+  white-space: nowrap;
+}
+
+th.sortable:hover {
+  background-color: rgba(13, 110, 253, 0.08);
+}
+
+th.sort-active {
+  background-color: rgba(13, 110, 253, 0.05);
+  font-weight: 600;
+}
+
+.sort-icon {
+  font-size: 0.85rem;
+  vertical-align: middle;
+}

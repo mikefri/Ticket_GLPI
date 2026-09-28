@@ -1,6 +1,8 @@
 /**
  * ============================================================
  *  MEETINGS.JS — Préparation des réunions (tickets nationaux)
+ *  + Tri par priorité par défaut
+ *  + Tri dynamique sur toutes les colonnes (flèches cliquables)
  *  + Colonne Description
  *  + Remontées Mi Digital (horodatage + historique + suppression admin)
  *  + Export Excel (SheetJS)
@@ -37,6 +39,24 @@ const MEETING_STATUS = {
   postponed: { label: 'Reporté',   icon: 'bi-arrow-repeat' }
 };
 
+// ── Poids des priorités pour le tri (plus c'est haut, plus c'est prioritaire) ──
+const PRIORITY_WEIGHT = {
+  'Critique': 5,
+  'Urgent': 5,
+  'Haute': 4,
+  'Moyenne': 3,
+  'Normal': 3,
+  'Basse': 2,
+  'Faible': 2,
+  '': 1 // Valeur par défaut si aucune priorité n'est définie
+};
+
+// ── État du tri dynamique ──
+const sortState = {
+  field: 'priority',       // Tri par défaut : priorité
+  direction: 'desc'        // 'desc' = décroissant (plus prioritaire en premier)
+};
+
 let allTickets = [];
 let unsubscribe = null;
 
@@ -54,6 +74,7 @@ const $ = (id) => document.getElementById(id);
 const DOM = {
   loading:          $('loading'),
   tableContainer:   $('meetings-table-container'),
+  tableHead:        document.querySelector('#meetings-table-container thead'),
   tableBody:        $('meetings-table-body'),
   emptyState:       $('empty'),
   filterStatus:     $('filter-meeting-status'),
@@ -86,6 +107,11 @@ function bindEvents() {
   DOM.btnExportExcel.addEventListener('click', exportToExcel);
   DOM.tableBody.addEventListener('click', onTableAction);
 
+  // ── Tri dynamique : écoute des clics sur les en-têtes ──
+  if (DOM.tableHead) {
+    DOM.tableHead.addEventListener('click', onHeaderClick);
+  }
+
   // Suppression d'une entrée Mi Digital (délégation dans la modal)
   DOM.miModalList.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-del-idx]');
@@ -110,7 +136,6 @@ function subscribeNationalTickets() {
 
   unsubscribe = onSnapshot(q, (snapshot) => {
     allTickets = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-    allTickets.sort((a, b) => toDate(b.createdAt) - toDate(a.createdAt));
     refreshStats();
     renderTable();
     hideLoading();
@@ -125,7 +150,7 @@ function subscribeNationalTickets() {
 // 6. AFFICHAGE
 // ------------------------------------------------------------
 function renderTable() {
-  const tickets = applyFilters(allTickets);
+  const tickets = applySorting(applyFilters(allTickets));
 
   if (tickets.length === 0) {
     DOM.tableContainer.classList.add('d-none');
@@ -136,7 +161,110 @@ function renderTable() {
   DOM.emptyState.classList.add('d-none');
   DOM.tableContainer.classList.remove('d-none');
   DOM.tableBody.innerHTML = tickets.map(buildRow).join('');
+  renderSortIcons();   // met à jour les flèches
   initTooltips();
+}
+
+// ── Fonction de tri centralisée ──
+function applySorting(tickets) {
+  const { field, direction } = sortState;
+  const dir = direction === 'asc' ? 1 : -1;
+
+  return [...tickets].sort((a, b) => {
+    let result = 0;
+
+    switch (field) {
+      case 'id':
+        result = getField(a, 'ticketNumber').localeCompare(getField(b, 'ticketNumber') || '');
+        break;
+      case 'title':
+        result = (getField(a, 'title') || '').localeCompare(getField(b, 'title') || '');
+        break;
+      case 'category':
+        result = (getField(a, 'category') || '').localeCompare(getField(b, 'category') || '');
+        break;
+      case 'priority': {
+        const pA = PRIORITY_WEIGHT[getField(a, 'priority')] || 1;
+        const pB = PRIORITY_WEIGHT[getField(b, 'priority')] || 1;
+        result = pA - pB;
+        break;
+      }
+      case 'status':
+        result = (getField(a, 'status') || '').localeCompare(getField(b, 'status') || '');
+        break;
+      case 'meetStatus':
+        result = (a.meetingStatus || '').localeCompare(b.meetingStatus || '');
+        break;
+      case 'miDigital': {
+        const dA = getLastMiTimestamp(a);
+        const dB = getLastMiTimestamp(b);
+        result = dA - dB;
+        break;
+      }
+      case 'createdAt':
+        result = toDate(a.createdAt) - toDate(b.createdAt);
+        break;
+      default:
+        result = 0;
+    }
+
+    return result * dir;
+  });
+}
+
+// ── Helper : récupère le timestamp de la dernière remontée Mi Digital ──
+function getLastMiTimestamp(ticket) {
+  const dates = Array.isArray(ticket?.miDigitalDates) ? ticket.miDigitalDates : [];
+  if (!dates.length) return 0;
+  const sorted = [...dates].sort((a, b) => toDate(b.at) - toDate(a.at));
+  return toDate(sorted[0].at).getTime();
+}
+
+// ── Gestion des clics sur les en-têtes ──
+function onHeaderClick(event) {
+  const th = event.target.closest('th[data-sort]');
+  if (!th) return;
+  
+  const field = th.dataset.sort;
+  if (!field) return;
+
+  // Inverser la direction si on reclique sur la même colonne, sinon mettre 'desc'
+  if (sortState.field === field) {
+    sortState.direction = sortState.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortState.field = field;
+    sortState.direction = 'desc';
+  }
+
+  renderTable();
+}
+
+// ── Met à jour les flèches visuelles dans les en-têtes ──
+function renderSortIcons() {
+  if (!DOM.tableHead) return;
+  
+  DOM.tableHead.querySelectorAll('th[data-sort]').forEach((th) => {
+    // Supprime les anciennes icônes
+    const oldIcon = th.querySelector('.sort-icon');
+    if (oldIcon) oldIcon.remove();
+
+    // Crée la nouvelle icône
+    const icon = document.createElement('i');
+    icon.className = 'sort-icon ms-1';
+
+    if (sortState.field === th.dataset.sort) {
+      // Colonne active
+      icon.classList.add('bi', 'text-primary', 'fw-bold');
+      icon.classList.add(sortState.direction === 'asc' ? 'bi-caret-up-fill' : 'bi-caret-down-fill');
+      th.classList.add('sort-active');
+    } else {
+      // Colonne inactive
+      icon.classList.add('bi', 'bi-arrow-down-up', 'text-muted', 'opacity-50');
+      th.classList.remove('sort-active');
+    }
+
+    th.appendChild(icon);
+  });
 }
 
 function buildRow(ticket) {
@@ -405,7 +533,8 @@ function lastMiDate(ticket) {
 }
 
 async function exportToExcel() {
-  const tickets = applyFilters(allTickets);   // exporte ce qui est affiché (filtres appliqués)
+  // Exporte les tickets triés tels qu'ils sont affichés à l'écran
+  const tickets = applySorting(applyFilters(allTickets));
 
   if (!tickets.length) {
     showToast('Aucun ticket à exporter.', 'warning');
@@ -566,7 +695,7 @@ function getField(ticket, key) {
       return ticket[alias];
     }
   }
-  return null;
+  return '';
 }
 
 function truncate(text, max) {

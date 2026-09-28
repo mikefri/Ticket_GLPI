@@ -1,5 +1,6 @@
 // assets/js/stats-v2.js
 // Page Statistiques V2 - Format GLPI par colonnes (admin only)
+// + Tri automatique par nombre de jours (0 en haut) dans chaque colonne
 
 import './app.js';
 import { db } from './firebase-init.js';
@@ -24,6 +25,27 @@ function daysSince(timestamp) {
   const now = new Date();
   const diff = now - date;
   return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+// ── Helper : timestamp en millisecondes (pour départager les égalités) ──
+function toTime(timestamp) {
+  if (!timestamp) return 0;
+  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+  return isNaN(date.getTime()) ? 0 : date.getTime();
+}
+
+// ── TRI : jours croissants (0 tout en haut), puis plus récent d'abord ──
+function sortByDaysAsc(tickets) {
+  return tickets.sort((a, b) => {
+    const daysA = daysSince(a.createdAt);
+    const daysB = daysSince(b.createdAt);
+
+    // Règle principale : le plus petit nombre de jours en premier (0 en haut)
+    if (daysA !== daysB) return daysA - daysB;
+
+    // Règle anti-mélange : même nombre de jours → ticket le plus récent d'abord
+    return toTime(b.createdAt) - toTime(a.createdAt);
+  });
 }
 
 // Formater un nom (prendre initiales ou raccourcir)
@@ -153,6 +175,13 @@ async function loadTickets() {
       } else if (status === 'Résolu') {
         columns.solved.push(ticket);
       }
+    });
+
+    // ══════════════════════════════════════════════════════
+    //  ✨ NOUVEAUTÉ : tri de chaque colonne par jours (0 en haut)
+    // ══════════════════════════════════════════════════════
+    Object.keys(columns).forEach(col => {
+      sortByDaysAsc(columns[col]);
     });
 
     console.log('[stats-v2] Colonnes après répartition:', {

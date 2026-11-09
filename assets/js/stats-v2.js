@@ -1,6 +1,7 @@
 // assets/js/stats-v2.js
 // Page Statistiques V2 - Format GLPI par colonnes (admin only)
 // + Tri automatique par nombre de jours (0 en haut) dans chaque colonne
+// + Indicateur visuel Local/National
 
 import './app.js';
 import { db } from './firebase-init.js';
@@ -85,10 +86,24 @@ function createTicketRow(ticket, columnType) {
   idDiv.appendChild(idLink);
   row.appendChild(idDiv);
 
-  // Libellé
+  // Libellé avec indicateur de portée (Local/National)
   const labelDiv = document.createElement('div');
   labelDiv.className = 'ticket-label';
-  labelDiv.textContent = ticket.title || 'Sans titre';
+  
+  // Créer l'indicateur de portée
+  const isNational = ticket.isNational === true;
+  const scopeIndicator = document.createElement('span');
+  scopeIndicator.className = `ticket-scope-indicator ${isNational ? 'national' : 'local'}`;
+  scopeIndicator.title = isNational ? 'Ticket national' : 'Ticket local';
+  scopeIndicator.innerHTML = isNational 
+    ? '<i class="bi bi-globe-americas"></i>' 
+    : '<i class="bi bi-globe2"></i>';
+  scopeIndicator.addEventListener('click', (e) => {
+    e.stopPropagation();
+  });
+  
+  labelDiv.appendChild(scopeIndicator);
+  labelDiv.appendChild(document.createTextNode(ticket.title || 'Sans titre'));
   labelDiv.title = ticket.title || '';
   row.appendChild(labelDiv);
 

@@ -163,7 +163,7 @@ main.container-fluid {
   color: #ddd;
   transition: background .15s;
   cursor: pointer;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .ticket-row:hover {
@@ -184,11 +184,49 @@ main.container-fluid {
 .ticket-label {
   flex: 1;
   min-width: 0;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  white-space: normal;
-  line-height: 1.3;
+}
+
+/* ══════════════════════════════════════════════════════
+   INDICATEUR DE PORTÉE (Local/National)
+   ══════════════════════════════════════════════════════ */
+.ticket-scope-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 13px;
+  cursor: help;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.ticket-scope-indicator.local {
+  background: linear-gradient(135deg, #ffc107 0%, #ff9800 100%);
+  color: #000;
+  border: 2px solid #ff9800;
+}
+
+.ticket-scope-indicator.national {
+  background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+  color: #fff;
+  border: 2px solid #0b5ed7;
+}
+
+.ticket-scope-indicator:hover {
+  transform: scale(1.15);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+}
+
+.ticket-scope-indicator i {
+  line-height: 1;
 }
 
 .ticket-client,
@@ -331,5 +369,11 @@ main.container-fluid {
 
   .stat-footer-value {
     font-size: 1.5rem;
+  }
+
+  .ticket-scope-indicator {
+    width: 18px;
+    height: 18px;
+    font-size: 11px;
   }
 }
